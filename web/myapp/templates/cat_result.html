@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAT Bridge</title>
+    <link rel="shortcut icon" href="../../docs-assets/ico/favicon.png">
+    <link rel="stylesheet" type="text/css" href="/static/assets/css/main.css">
+    <link rel="stylesheet" type="text/css" href="/static/assets/css/bootstrap.css">
+    <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+    <script src="./assets/js/hover.zoom.js"></script>
+    <script src="./assets/js/hover.zoom.conf.js"></script>
+
+    <style>
+        h2 {
+            color: #606060;
+        }
+
+        #svg8,
+        #svg2,
+        #svg3,
+        #svg4,
+        #svg5,
+        #svg6,
+        #svg7 {
+            transform: rotate(180deg);
+            cursor: pointer;
+        }
+
+        .div-parent {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .div-child {
+            flex: 1;
+            text-align: center;
+        }
+
+        .div-child h2 {
+            color: rgb(96, 96, 96);
+        }
+
+        .line-image {
+            width: 100%;
+            height: auto;
+        }
+
+        .pca-image {
+            width: 100%;
+            height: auto;
+        }
+
+        .padded {
+            padding: 0 20px;
+        }
+
+        .padded h2 {
+            color: rgb(96, 96, 96);
+        }
+
+        .space-bottom {
+            margin-bottom: 20px;
+        }
+
+        a {
+            color: #003060;
+        }
+
+        a:hover {
+            color: #606060;
+        }
+
+        table {
+            border-collapse: collapse;
+            border: 1px solid #003060;
+        }
+
+        td {
+            border-bottom: 1px solid #003060;
+            padding: 8px;
+        }
+
+        td a {
+            color: #003060;
+            font-size: large;
+            padding: 10px;
+        }
+
+        .catalog td {
+            color: rgb(255, 255, 255);
+            font-size: large;
+        }
+
+        h3 {
+            background-color: #003060;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            margin-bottom: 0px;
+            font-weight: normal;
+        }
+
+        #section_8,
+        #section_2,
+        #section_3,
+        #section_4,
+        #section_5,
+        #section_6,
+        #section_7 {
+            margin-top: 0px;
+            display: block;
+            text-align: center;
+        }
+
+        img {
+            display: block;
+            margin: 20px auto;
+        }
+
+        #parent::after {
+            content: "";
+            display: block;
+            clear: both;
+        }
+    </style>
+
+
+</head>
+
+<body>
+    <div class="navbar navbar-inverse navbar-static-top" style="background-color: #003060; height: 100px;margin-bottom: 0px;">
+        <div class="container">
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href=" " style="padding-top: 0px;position: relative;">
+              <image src="/static/assets/img/cat3.png" style="height: 80px;position: relative;top:-58px;">
+              </image>
+              <span style="width: 30px;height: 20px;position: relative;left: 10px; relative;top: -30px; color:#ffffff;">    CAT Brigde<span>
+            </a >
+          </div>
+          <div class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-right">
+    
+              <!--  更改成HomePage的link   -->
+              <li><a href="http://www.catbridge.work/myapp/CAT/" style="padding-top: 0px;">Home</a></li>
+              <li><a href="http://www.catbridge.work/myapp/tutorial/" style="padding-top: 0px;">Tutorial</a></li>
+              <li><a href="http://www.catbridge.work/myapp/about/" style="padding-top: 0px;">About</a></li>
+              <li><a href="http://www.catbridge.work/myapp/contact/" style="padding-top: 0px;">Contact</a></li>
+    
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+    </div>
+
+    <!-- <div class="padded">
+        <h1>
+            <font color="black">Analysis Results</font>
+        </h1>
+    </div> -->
+
+    <div class="container" style="margin:30px 5%">
+        <!-- 目录 -->
+        <div class="catalog" style="font-weight: normal;">
+            <table class="my-about" width="100%" id="pop_leader">
+                <tr>
+                    <td rowspan="2" style="text-align: center;background-color:#003060;"><span href="#"
+                            style="color: white;">Analysis <br >Results</span></td>
+                    <td><a href="#section2">Result Table</a></td>
+                    <td><a href="#section3">Line Plot</a></td>
+                    <td><a href="#section4">PCA</a></td>
+                    <td><a href="#section5">Heatmap</a></td>
+                </tr>
+                <tr>
+                    <td><a href="#section6">Importance Features</a></td>
+                    <td><a href="#section7">Volcano Plot</a></td>
+                    <td><a href="#section8">Similar Network</a></td>
+                    <td><a href="#section8">Downlaod</a></td>
+                    <td><a href="javascript:;"></a></td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 正文 -->
+        <!-- section 2 -->
+        <section id="section2">
+            <h3 id="btn2">Result Table
+                <svg id="svg2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_2">
+                <h2>Result Table</h2>
+                <div>
+                    <div>
+                        <img src="/static/img/{{ ticks }}_table.svg" style="width: 97%;" />
+                    </div>
+                    <div>
+                        <img src="/static/img/{{ ticks }}_result.svg" style="width: 97%;" />
+                    </div>
+                </div>
+            </div>
+
+
+             <script>
+                var btn2 = document.getElementById("btn2");
+                var svg2 = document.getElementById("svg2");
+                btn2.onclick = function () {
+                    if (section_2.style.display == 'none') {
+                        section_2.style.display = 'block';
+                        svg2.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_2.style.display = 'none';
+                        svg2.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+
+
+        </section>
+
+
+        <!-- section 3 -->
+        <section id="section3">
+            <h3 id="btn3">Line Plot
+                <svg id="svg3" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_3">
+                <h2>Line Plot of Target Feature</h2>
+                <div>
+                    <div>
+                        <img src="/static/img/{{ ticks }}_line.svg" width="97%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn3 = document.getElementById("btn3");
+                var svg3 = document.getElementById("svg3");
+                btn3.onclick = function () {
+                    if (section_3.style.display == 'none') {
+                        section_3.style.display = 'block';
+                        svg3.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_3.style.display = 'none';
+                        svg3.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+
+        </section>
+
+
+        <!-- section 4 -->
+        <section id="section4">
+            <h3 id="btn4">PCA
+                <svg id="svg4" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <!-- <div id="section_4">
+                <div>
+                    <div style="display: inline;">
+                        <h2>PCA of Transcriptomics</h2>
+                        <img src="C:/Users/zhang/Desktop/img_example/4.svg" width="32%" />
+                    </div>
+                    <div style="display: inline;">
+                        <h2>PCA of Metabolomics</h2>
+                        <img src="C:/Users/zhang/Desktop/img_example/5.svg" width="32%" />
+                    </div>
+                    <div style="display: inline;">
+                        <h2>Overall PCA</h2>
+                        <img src="C:/Users/zhang/Desktop/img_example/6.svg" width="32%" />
+                    </div>
+                </div>
+            </div> -->
+            <div id="section_4">
+                <div id="parent">
+                    <div style="float: left;width: 33%;">
+                        <h2>PCA of Transcriptomics</h2>
+                        <img src="/static/img/{{ ticks }}_g_pca.svg" width="100%" />
+                    </div>
+                    <div style="float: left;width: 33%;">
+                        <h2>PCA of Metabolomics</h2>
+                        <img src="/static/img/{{ ticks }}_m_pca.svg" width="100%" />
+                    </div>
+                    <div style="float: left;width: 33%;">
+                        <h2>Overall PCA</h2>
+                        <img src="/static/img/{{ ticks }}_merged_pca.svg" width="100%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn4 = document.getElementById("btn4");
+                var svg4 = document.getElementById("svg4");
+                btn4.onclick = function () {
+                    if (section_4.style.display == 'none') {
+                        section_4.style.display = 'block';
+                        svg4.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_4.style.display = 'none';
+                        svg4.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+
+        </section>
+
+        <!-- section 5 -->
+        <section id="section5">
+            <h3 id="btn5">Heatmap
+                <svg id="svg5" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_5">
+                <div id="parent">
+                    <div style="float: left;width: 49%;">
+                        <h2>Heatmap of Transcriptomics</h2>
+                        <img src="/static/img/{{ ticks }}_g_heatmap.svg" width="100%" />
+                    </div>
+                    <div style="float: left;width: 49%;">
+                        <h2>Heatmap of Metabolomics</h2>
+                        <img src="/static/img/{{ ticks }}_m_heatmap.svg" width="100%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn5 = document.getElementById("btn5");
+                var svg5 = document.getElementById("svg5");
+                btn5.onclick = function () {
+                    if (section_5.style.display == 'none') {
+                        section_5.style.display = 'block';
+                        svg5.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_5.style.display = 'none';
+                        svg5.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+
+        </section>
+
+        <!-- section 6 -->
+        <section id="section6">
+            <h3 id="btn6">Importance Features
+                <svg id="svg6" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_6">
+                <div id="parent">
+                    <div style="float: left;width: 49%;">
+                        <h2>Heatmap of Transcriptomics</h2>
+                        <img src="/static/img/{{ ticks }}_g_imp.svg" width="100%" />
+                    </div>
+                    <div style="float: left;width: 49%;">
+                        <h2>Heatmap of Metabolomics</h2>
+                        <img src="/static/img/{{ ticks }}_m_imp.svg" width="100%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn6 = document.getElementById("btn6");
+                var svg6 = document.getElementById("svg6");
+                btn6.onclick = function () {
+                    if (section_6.style.display == 'none') {
+                        section_6.style.display = 'block';
+                        svg6.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_6.style.display = 'none';
+                        svg6.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+        </section>
+
+        <!-- section 7 -->
+        <section id="section7">
+            <h3 id="btn7">Volcano Plot
+                <svg id="svg7" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_7">
+                <div id="parent">
+                    <div>
+                        <h2>Volcano Plot (Peak vs Decline)</h2>
+                        <img src="/static/img/{{ ticks }}_volcano.png" width="80%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn7 = document.getElementById("btn7");
+                var svg7 = document.getElementById("svg7");
+                btn7.onclick = function () {
+                    if (section_7.style.display == 'none') {
+                        section_7.style.display = 'block';
+                        svg7.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_7.style.display = 'none';
+                        svg7.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+        </section>
+
+        <!-- section 8 -->
+        <section id="section8">
+            <h3 id="btn8">Similar Network
+                <svg id="svg8" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_8">
+                <div id="parent">
+                    <div>
+                        <h2>Similar Network of Target</h2>
+                        <img src="/static/img/{{ ticks }}_network.svg" width="97%" />
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn8 = document.getElementById("btn8");
+                var svg8 = document.getElementById("svg8");
+                btn8.onclick = function () {
+                    if (section_8.style.display == 'none') {
+                        section_8.style.display = 'block';
+                        svg8.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_8.style.display = 'none';
+                        svg8.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+        </section>
+
+
+    <!-- section 8 -->
+        <section id="section9">
+            <h3 id="btn9">Download Results
+                <svg id="svg9" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                    class="bi bi-chevron-down" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd"
+                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                </svg>
+            </h3>
+            <div id="section_9">
+                <div id="parent">
+                    <div>
+                        <a href="/static/img/{{ ticks }}_result.csv" download="result.csv" style="font-size: 1.5em;">Result table</a>
+                        <br>
+                        <a href="/static/img/{{ ticks }}_ai.txt" download="ai.txt" style="font-size: 1.5em;">Yuanfang's(GPT3.5) answer</a>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var btn8 = document.getElementById("btn8");
+                var svg8 = document.getElementById("svg8");
+                btn8.onclick = function () {
+                    if (section_8.style.display == 'none') {
+                        section_8.style.display = 'block';
+                        svg8.style.transform = 'rotate(180deg)';
+                    } else {
+                        section_8.style.display = 'none';
+                        svg8.style.transform = 'rotate(0deg)';
+                    }
+                }
+            </script>
+        </section>
+    </div>
+
+
+    <!-- Bootstrap core JavaScript
+  ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="./assets/js/bootstrap.min.js"></script>
+    <script src="file-uploader.js"></script>
+
+      <!-- +++++ 3.页脚 +++++ -->
+  <div id="footer" , style="background-color: #055C9D; height: 280px;">
+    <div class="container">
+      <!-- <a href="http://www.guo-lab.site/index.html" style="color: white">Powered by Guo Lab</a> -->
+      <div class="row">
+        <div class="col-lg-12 tighted" style="display: flex;flex-wrap: wrap;justify-content: center;">
+          <div class="mapContainer" style="text-align: right;height: 180px;min-width: 300px;padding-right:10px; color: #003060;">
+            <div id="map-container" style="color: #003060; width: 300px !important;height:150px !important">
+              <script type='text/javascript' id='clustrmaps' src='//cdn.clustrmaps.com/map_v2.js?cl=0e1633&w=300&t=tt&d=4g9OE5un7-QbSo2Sr_VQwwNKlwqhcJjy0KeFvZMEXuk&co=0b4975&cmo=3acc3a&cmn=ff5353&ct=cdd4d9'></script>
+            </div>
+          </div>
+
+<div class="schoolLogo" style="text-align: left;height: 180px;padding-top: 30px;min-width: 200px;padding-left: 10px;">
+    <div><a href="http://www.pku-iaas.edu.cn">
+            <img src="/static/assets/img/logo1.png"
+                style="width: 70%;margin-left: 0px;padding-left: 0px;margin-top: 0%;padding-top: 0%;margin-bottom: 0%;padding-bottom: 10px;">
+        </a>
+    </div>
+    <div>
+        <a href="http://www.pku-iaas.edu.cn">
+            <img src="/static/assets/img/logo2.png"
+                style="width: 200px;margin-top: 10px;margin-left: 0px;padding-left: 0px;margin-top: 0%;padding-top: 0%;margin-bottom: 0%;padding-bottom: 0px;">
+        </a>
+        <p style="position: relative;">
+            <a href="http://www.guo-lab.site/"
+                style="color: white!important;text-decoration: none!important;font-size: medium;margin-top: 0%;padding-top: 0%;margin-bottom: 0%;padding-bottom: 0%;margin-left: 0px!important;padding-left: 0px!important;position: absolute;left: 0%;">
+                Powered by Guo Lab
+            </a>
+        </p>
+    </div>
+</div>
+
+        </div>
+
+</body>
+
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAT Bridge</title>
+  <link rel="shortcut icon" href="../../docs-assets/ico/favicon.png">
+  <link rel="stylesheet" type="text/css" href="/static/assets/css/main.css">
+  <link rel="stylesheet" type="text/css" href="/static/assets/css/bootstrap.css">
+  <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+  <script src="assets/js/hover.zoom.js"></script>
+  <script src="assets/js/hover.zoom.conf.js"></script>
+
+  <style>
+        .content-area {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            margin-left: 0px!important;
+            padding: 20px;
+            background: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+  
+    .content-area h2 {
+      font-size: 2.0em;
+      color: #003060;
+      margin-bottom: 10px;
+    }
+  
+    .content-area p {
+      color: #070000;
+      font-size: 2.0 em;
+      line-height: 1.6;
+    }
+  
+    .content-area a {
+      color: #007bff;
+      text-decoration: none;
+    }
+  
+    .content-area a:hover {
+      color: #0056b3;
+      text-decoration: underline;
+    }
+
+    .italic-gray {
+      font-style: italic;
+      color: rgb(221, 210, 210);
+    }
+    
+    .image-container {
+      display: flex;
+      justify-content: space-around;
+    }
+    
+        .mysidebar {
+            position: fixed;
+            height: 300px;
+            width: 250px;
+            z-index: 9999;
+            margin-top: 101px;
+        }
+
+        .mycontent {
+            margin-left: 235px;
+            margin-top: 100px;
+        }
+
+        .myfixed {
+            position: fixed;
+            width: 100%;
+        }
+
+        .mysidebar a {
+            color: #003060;
+            padding: 15px;
+            padding-left: 30px;
+            display: block;
+            text-decoration: none;
+        }
+
+        .mysidebar a:hover {
+            background: rgb(195, 220, 239);
+        }
+
+        h4 {
+            display: inline;
+        }
+
+        svg {
+            display: inline;
+            vertical-align: top;
+        }
+        
+    body {
+      font-family: Arial, sans-serif!important;
+      background-color: #f7f7f7!important;
+      color: #333!important;
+      line-height: 1.6!important;
+    }
+    
+    h2 {
+      font-size: 2.2em!important;
+      color: #003060!important;
+      margin-bottom: 20px!important;
+    }
+    
+    p {
+      font-size: 1.2em!important;
+      color: #333!important;
+      line-height: 1.8!important;
+    }
+    
+    .mycontainer{
+      width: 100%
+    }
+  </style>
+
+</head>
+
+
+<body>
+  <!--  1.头部菜单栏 -->
+  <div class="navbar navbar-inverse navbar-static-top myfixed" style="background-color: #003060; height: 100px;margin-bottom: 0px;">
+    <div class="container">
+      <div class="navbar-header">
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href=" " style="padding-top: 0px;position: relative;">
+          <image src="/static/assets/img/cat3.png" style="height: 80px;position: relative;top:-40px;">
+          </image>
+          <span style="width: 30px;height: 20px;position: relative;left: 10px; relative;top: -30px; color:#ffffff;">    CAT Brigde<span>
+        </a >
+      </div>
+      <div class="navbar-collapse collapse">
+        <ul class="nav navbar-nav navbar-right">
+
+          <!--  更改成HomePage的link   -->
+          <li><a href="http://www.catbridge.work" style="padding-top: 0px;">Home</a></li>
+          <li><a href="http://www.catbridge.work/myapp/tutorial/" style="padding-top: 0px;">Tutorial</a></li>
+          <li><a href="http://www.catbridge.work/myapp/about/" style="padding-top: 0px;">About</a></li>
+          <li><a href="http://www.catbridge.work/myapp/contact/" style="padding-top: 0px;">Contact</a></li>
+
+        </ul>
+      </div><!--/.nav-collapse -->
+    </div>
+    </div>
+    
+    <div class="mysidebar">
+        <a class="substance" href="javascript:;" onclick="toGuide()">
+            <h4>User Guide</h4>
+            <svg t="1690250658764" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                p-id="2416" width="20" height="20">
+                <path
+                    d="M558.933333 490.666667L384 665.6l59.733333 59.733333 234.666667-234.666666L443.733333 256 384 315.733333l174.933333 174.933334z"
+                    fill="#003060" p-id="2417"></path>
+            </svg>
+        </a>
+        <a class="substance" href="javascript:;" onclick="toInput()">
+            <h4>Data Type and Input</h4>
+            <svg t="1690250658764" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                p-id="2416" width="20" height="20">
+                <path
+                    d="M558.933333 490.666667L384 665.6l59.733333 59.733333 234.666667-234.666666L443.733333 256 384 315.733333l174.933333 174.933334z"
+                    fill="#003060" p-id="2417"></path>
+            </svg>
+        </a>
+        <a class="substance" href="javascript:;" onclick="toInput()">
+            <h4>Parameters</h4>
+            <svg t="1690250658764" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                p-id="2416" width="20" height="20">
+                <path
+                    d="M558.933333 490.666667L384 665.6l59.733333 59.733333 234.666667-234.666666L443.733333 256 384 315.733333l174.933333 174.933334z"
+                    fill="#003060" p-id="2417"></path>
+            </svg>
+        </a>
+    </div>
+
+    <script>
+        function toGuide() {
+            let guide = document.getElementById('user-guide');
+            let guideTop = guide.offsetTop - 110;
+            document.documentElement.scrollTop = guideTop;
+        }
+        function toInput() {
+            let data = document.getElementById('data-type-and-input');
+            let dataTop = data.offsetTop - 110;
+            document.documentElement.scrollTop = dataTop;
+        }
+
+    </script>
+
+    <div class="container mycontainer">
+        <div class="mycontent">
+        
+    <div class="content-area">
+        <h2 id="user-guide">User Guide</h2>
+        <p>For programmers, we <strong>highly recommend using the Python package version</strong>, which offers independence from server resource limitations, more functions, and better pre-processing for files. You can <a href="">download it</a> from Github, see the <a href="">demo</a> for details.</p>
+        <p>For the web version, we suggest using either <strong> Firefox</strong> or <strong>Chrome</strong> as there may be compatibility issues with other browsers.
+        <p>A client version is currently under development, stay tuned for updates.</p>
+        <br>
+
+        <h2 id="data-type-and-input">Data Type and Input</h2>
+        <p>All four uploaded files should be in tsv/csv format, with transcriptome and metabolome being mandatory.</p>
+        <p>Annotation and Study Design are optional (If there are no biological repetitions, please do not upload Study Design).</p>
+        <p class="italic-gray">Annotations for non-model organisms are usually obtained through homologous annotation. Don't know how to do? Try <a href="http://eggnog-mapper.embl.de">eggNOG-mapper</a> or <a href="https://dbsloan.github.io/TS2019/exercises/local_blast.html">BLAST</a>？</p>
+        <div class="image-container">
+          <image src="/static/assets/img/input1.svg" style="width: 800px;"></image>
+        </div>
+        <div class="image-container">
+          <image src="/static/assets/img/input2.svg" style="width: 800px;"></image>
+        </div>
+        <br>
+        <p><strong>Targets</strong> refer to metabolites of interest and should be present in the metabolome file.<br><strong>Cluster Number</strong> refers to how many categories the genes will be clustered into.<br><strong>Aggregation Method</strong> is used for dealing with biological repetitions (it is not required if there are no biological repetitions).</p>
+    </div>
+    </div>
+    </div>
+
+
+
+
+<!-- +++++ 3.页脚 +++++ -->
+<div id="footer" , style="background-color: #055C9D; height: 280px;">
+    <div class="container">
+      <!-- <a href="http://www.guo-lab.site/index.html" style="color: white">Powered by Guo Lab</a> -->
+      <div class="row">
+        <div class="col-lg-12 tighted" style="display: flex;flex-wrap: wrap;justify-content: center;">
+          <div class="mapContainer" style="text-align: right;height: 180px;min-width: 300px;padding-right:10px; color: #003060;">
+            <div id="map-container" style="color: #003060; width: 300px !important;height:150px !important">
+              <script type='text/javascript' id='clustrmaps' src='//cdn.clustrmaps.com/map_v2.js?cl=0e1633&w=300&t=tt&d=4g9OE5un7-QbSo2Sr_VQwwNKlwqhcJjy0KeFvZMEXuk&co=0b4975&cmo=3acc3a&cmn=ff5353&ct=cdd4d9'></script>
+            </div>
+          </div>
+          <div class="schoolLogo"
+            style="text-align: left;height: 180px;padding-top: 30px;min-width: 200px;padding-left: 10px">
+            <div><a href="http://www.pku-iaas.edu.cn"><img src="/static/assets/img/logo1.png" style="width: 70%;"></a>
+            </div>
+            <div><a href="http://www.pku-iaas.edu.cn"><img src="/static/assets/img/logo2.png"
+                  style="width: 200px;margin-right: -50px;margin-top: 10px;"></a>
+                  <p>
+                                <a href="http://www.guo-lab.site/"
+                                    style="color: white!important;text-decoration: none!important;">    Powered by Guo
+                                    Lab</a>
+                            </p>
+            </div>
+          </div>
+
+        </div>
+        <div class="col-lg-12 tighted" style="text-align: right;margin-right: 50px;">
+
+        </div>
+        <!-- <div class="col-lg-4"><a href="http://www.pku-iaas.edu.cn"><img src="assets/img/logo1.png"></a></div>
+    <div class="col-lg-4"><a href="http://www.pku-iaas.edu.cn"><img src="assets/img/logo2.png"></a></div>
+    <div class="col-lg-4"><a href="https://tripal.info"><img src="assets/img/logo3.png" style="width:50%;"></a></div> -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>

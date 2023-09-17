@@ -1,0 +1,5 @@
+Please provide a gene annotation file to use this feature. 
+For how to obtain it, please refer to: http://www.catbridge.work/myapp/tutorial/. 
+
+Due to network reasons, the server sometimes cannot connect to the OpenAI API. 
+You can try to use the Python package version to use this feature.

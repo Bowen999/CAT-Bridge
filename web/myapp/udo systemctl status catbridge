@@ -1,0 +1,20 @@
+[0;1;32m●[0m catbridge.service - catbridge
+     Loaded: loaded (/etc/systemd/system/catbridge.service; enabled; vendor preset: enabled)
+     Active: [0;1;32mactive (running)[0m since Sat 2023-07-22 18:12:55 CST; 11min ago
+   Main PID: 63588 (python3)
+      Tasks: 2 (limit: 8829)
+     Memory: 56.0M
+     CGroup: /system.slice/catbridge.service
+             ├─63588 /usr/bin/python3 /home/ubuntu/catbridge/manage.py runserver 0.0.0.0:5555
+             └─63597 /usr/bin/python3 /home/ubuntu/catbridge/manage.py runserver 0.0.0.0:5555
+
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:   File "/home/ubuntu/.local/lib/python3.8/site-packages/django/utils/autoreload.py", line 64, in wrapper
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:     fn(*args, **kwargs)
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:   File "/home/ubuntu/.local/lib/python3.8/site-packages/django/core/management/commands/runserver.py", line 133, in inner_run
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:     self.check(display_num_errors=True)
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:   File "/home/ubuntu/.local/lib/python3.8/site-packages/django/core/management/base.py", line 556, in check
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]:     raise SystemCheckError(msg)
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]: django.core.management.base.SystemCheckError: SystemCheckError: System check identified some issues:
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]: ERRORS:
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]: ?: (4_0.E001) As of Django 4.0, the values in the CSRF_TRUSTED_ORIGINS setting must start with a scheme (usually http:// or https://) but found www.catbridge.work. See the release notes for details.
+Jul 22 18:12:56 VM-8-17-ubuntu python3[63597]: System check identified 1 issue (0 silenced).

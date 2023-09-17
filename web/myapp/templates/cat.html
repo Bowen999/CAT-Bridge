@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAT Bridge</title>
+  <link rel="shortcut icon" href="../../docs-assets/ico/favicon.png">
+  <link rel="stylesheet" type="text/css" href="/static/assets/css/main.css">
+  <link rel="stylesheet" type="text/css" href="/static/assets/css/bootstrap.css">
+  <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+  <script src="assets/js/hover.zoom.js"></script>
+  <script src="assets/js/hover.zoom.conf.js"></script>
+</head>
+<style>
+  .bottomBtn {
+    outline: none;
+    border: 1px solid #000000;
+    border-radius: 10px;
+    padding: 4px 12px;
+    height: 30px;
+    line-height: 30px;
+    box-sizing: content-box;
+  }
+
+  #map-container {
+    width: 500px;
+    height: 200px;
+    background-color: orangered;
+  }
+  #map-container {
+        width: 500px;
+        height: 200px;
+        background-color: white;
+    }
+
+    .file-name-wrapper {
+        position: relative;
+        left: 220px;
+        /* 向右缩进 100px */
+        width: 200px;
+        justify-content: space-between;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    .file-name-wrapper #link-icon {
+        text-align: center;
+    }
+
+    .file-name-wrapper #file-name {
+        color: black !important;
+        font-size: 13px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        text-align: center;
+    }
+
+    .file-name-wrapper #delete-icon {
+        margin-left: 0 !important;
+
+    }
+
+    .file-name-wrapper:hover {
+        background: #ecebeb;
+    }
+
+    #file-container #delete-icon:hover {
+        background: #cdcbcb;
+    }
+
+</style>
+
+<style>
+    #body_LOADING {
+        background-color: #666666;
+        width: 100%;
+        height: 100%;
+        opacity: 0.5;
+        z-index: 9998;
+        position: fixed;
+        display: none;
+    }
+
+    #LOADING {
+        position: fixed;
+        margin: auto;
+        top: 0;
+        bottom: 0;
+        /*底部固定*/
+        left: 0;
+        /*实现div的居中*/
+        right: 0;
+        /*实现div的居中*/
+        text-align: center;
+        /*div的内容居中*/
+        background-color: red;
+        width: 500px;
+        height: 200px;
+        display: none;
+        z-index: 9999;
+    }
+</style>
+    <div id="body_LOADING"></div>
+
+
+<body>
+    <div id="LOADING">
+        <img src="https://img.zcool.cn/community/0148f05a8ad95ca8012045b3719b27.gif" style="width: 100%;height: 100%;"/>
+    </div>
+
+  <!--  1.头部菜单栏 -->
+  <div class="navbar navbar-inverse navbar-static-top" style="background-color: #003060; height: 100px;margin-bottom: 0px;">
+    <div class="container">
+      <div class="navbar-header">
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href=" " style="padding-top: 0px;position: relative;">
+          <image src="/static/assets/img/cat3.png" style="height: 80px;position: relative;top:-40px;">
+          </image>
+          <span style="width: 30px;height: 20px;position: relative;left: 10px; relative;top: -30px; color:#ffffff;">    CAT Brigde<span>
+        </a >
+      </div>
+      <div class="navbar-collapse collapse">
+        <ul class="nav navbar-nav navbar-right">
+
+          <!--  更改成HomePage的link   -->
+          <li><a href="http://www.catbridge.work/myapp/CAT/" style="padding-top: 0px;">Home</a></li>
+          <li><a href="http://www.catbridge.work/myapp/tutorial/" style="padding-top: 0px;">Tutorial</a></li>
+          <li><a href="http://www.catbridge.work/myapp/about/" style="padding-top: 0px;">About</a></li>
+          <li><a href="http://www.catbridge.work/myapp/contact/" style="padding-top: 0px;">Contact</a></li>
+
+
+        </ul>
+      </div><!--/.nav-collapse -->
+    </div>
+  </div>
+
+
+
+
+
+  <!-- 介绍栏 -->
+  <div id="hsbj" style="min-height: 150px; background-color: #055C9D; color:rgb(255, 255, 255); position: relative;">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-12 centered" style="padding-top: 20px;padding-bottom: 20px;">
+  
+          <span style="font-size: 18px;font-weight: 600;">CAT Bridge (Compounds And Transcripts Bridge) is a robust tool
+            built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes
+            potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data.</span>
+          </h3>
+          <div style="width: 100%;text-align: center;">
+            <a href="http://101.43.255.54:5555/myapp/about/" style="margin-top: 5px;margin-bottom: 10px;color:rgb(16, 8, 88);background-color: white;font-family: 'Montserrat', sans-serif;font-weight: 700;font-size: 24px;outline: none;border: 1px solid #000000;border-radius: 10px;padding: 4px 12px;height: 30px;line-height: 30px;box-sizing: content-box;display: inline-block;">
+              Know More
+            </a>
+          </div>
+          <!-- <button type="button">CAT Bridge</button> -->
+          <!-- <h3 style="margin-top: 5px;margin-bottom: 10px;color:white">CAT Bridge</h3> -->
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  
+
+
+
+  <!--  2.文件上传 -->
+  <!-- <form id="formData" action="/myapp/CAT_RESULT/" method="post" enctype="multipart/form-data">
+    <span style="display: none;"> <input type="hidden" name="csrfmiddlewaretoken" value="oZnRTJeWKqF2YpHiXzp0Q9fb2gfMt7o5iTheSqYC5TJK6DvmYmUkKpOPvYWHNIQT"> </span> -->
+    <form id="formData" action="/myapp/CAT_RESULT/" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+    <!-- <form id="formData"> -->
+    <!-- 2.Body区 -->
+    <div id="ww">
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-24 centered" style="padding-left: 0px;display: flex;flex-wrap: wrap;">
+
+            <!-- 2.1 Gene List上传 -->
+            <div id="file-uploader" class="file-uploader">
+              <div class="file-uploader-icon">
+                <img src="/static/assets/img/gene.svg"
+                  style="float: left; margin-right: 10px; width: 70px; height: 70px; margin-top: 50px;">
+                <i class="fas fa-inbox"></i>
+              </div>
+              <p class="file-uploader-text" style="color: black;">Upload Your
+                <strong>Transcriptome</strong>
+                File
+              </p>
+              <p class="file-uploader-hint" style="color: #6F6B6B;">
+                The transcriptome file should be a tsv/csv matrix of gene expression levels. You can download the <a href="url">example
+                  file</a> for reference
+              </p>
+              <input type="file" id="upload1" name="gene_file" class="uploadFile" style="display: none;" onchange="validateFile('upload1')">
+                            <button type="button" id="upload-button1" class="upload"
+                                style="background-color: #f2f2f2; color: black;  border: 1px solid black;border-radius: 5px; padding: 6px 12px; ">
+                                <svg t="1689560513482" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" p-id="2933"     id="mx_n_1689560513485"
+                                    width="15" height="15">
+                                        <path         d="M544 201.6a31.552 31.552 0 0 0-32 31.04v434.304a32 32 0 0 0 64 0V232.64a31.552 
+                                    31.552 0 0 0-32-31.04z m0-75.072L329.6 338.112a30.4 30.4 0 0 0 6.4 43.456 32.832 32.832 
+                                        0 0 0 38.4 0L544 214.016 713.6 377.6a31.424 31.424 0 0 0 43.392 1.344l1.408-1.344a29.76 29.76 0 
+                                        0 0 0-42.816zM896 832H192a54.528 54.528 0 0 1-64-64v-119.68a32 32 0 0 1 64 
+                                        0V768h704v-119.68a32 32 0 0 1 64 0V768a67.328 67.328 0 0 1-64 64z"        
+                                        fill="black" p-id="2934"></path>
+                                </svg>
+                                Upload
+                            </button>
+                            <div class="file-name-wrapper" id="file-container">
+                                <svg id="link-icon" class="link-icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" width="15" height="15" style="display: none;">
+                                    <path d="M607.934444 417.856853c-6.179746-6.1777-12.766768-11.746532-19.554358-16.910135l-0.01228 
+                                    0.011256c-6.986111-6.719028-16.47216-10.857279-26.930349-10.857279-21.464871 
+                                    0-38.864146 17.400299-38.864146 38.864146 0 9.497305 3.411703 18.196431 9.071609 24.947182l-0.001023 
+                                    0c0.001023 0.001023 0.00307 0.00307 0.005117 0.004093 2.718925 3.242857 
+                                    5.953595 6.03853 9.585309 8.251941 3.664459 3.021823 7.261381 5.997598 10.624988 
+                                    9.361205l3.203972 3.204995c40.279379 40.229237 28.254507 109.539812-12.024871 149.820214L371.157763 
+                                    796.383956c-40.278355 40.229237-105.761766 40.229237-146.042167 
+                                    0l-3.229554-3.231601c-40.281425-40.278355-40.281425-105.809861 
+                                    0-145.991002l75.93546-75.909877c9.742898-7.733125 15.997346-19.668968 
+                                    15.997346-33.072233 0-23.312962-18.898419-42.211381-42.211381-42.211381-8.797363 0-16.963347 
+                                    2.693342-23.725354 7.297197-0.021489-0.045025-0.044002-0.088004-0.066515-0.134053l-0.809435 0.757247c-2.989077 
+                                    2.148943-5.691629 4.669346-8.025791 7.510044l-78.913281 73.841775c-74.178443 74.229608-74.178443 
+                                    195.632609 0 269.758863l3.203972 3.202948c74.178443 74.127278 195.529255 74.127278 269.707698 
+                                    0l171.829484-171.880649c74.076112-74.17435 
+                                    80.357166-191.184297 6.282077-265.311575L607.934444 417.856853z" fill="#5D5D5D"
+                                        p-id="2327"></path>
+                                    <path
+                                        d="M855.61957 165.804257l-3.203972-3.203972c-74.17742-74.178443-195.528232-74.178443-269.706675 
+                                        0L410.87944 334.479911c-74.178443 
+                                    74.178443-78.263481 181.296089-4.085038 255.522628l3.152806 3.104711c3.368724 3.367701 6.865361 6.54302 
+                                    10.434653 9.588379 2.583848 
+                                    2.885723 5.618974 5.355985 8.992815 7.309476 0.025583 0.020466 0.052189 0.041956 0.077771 
+                                    0.062422l0.011256-0.010233c5.377474 
+                                    3.092431 11.608386 4.870938 18.257829 4.870938 20.263509 0 36.68962-16.428158 36.68962-36.68962 
+                                    0-5.719258-1.309832-11.132548-3.645017-15.95846l0 
+                                    0c-4.850471-10.891048-13.930267-17.521049-20.210297-23.802102l-3.15383-3.102664c-40.278355-40.278355-24.982998-98.79612 
+                                    15.295358-139.074476l171.930791-171.830507c40.179095-40.280402 105.685018-40.280402 145.965419 0l3.206018 
+                                    3.152806c40.279379 
+                                    40.281425 40.279379 105.838513 0 146.06775l-75.686796 75.737962c-10.296507 7.628748-16.97358 19.865443-16.97358 
+                                    33.662681 0 23.12365 18.745946 
+                                    41.87062 41.87062 41.87062 8.048303 0 15.563464-2.275833 21.944801-6.211469 0.048095 0.081864 0.093121 
+                                    0.157589 0.141216 
+                                    0.240477l1.173732-1.083681c3.616364-2.421142 6.828522-5.393847 9.529027-8.792247l79.766718-73.603345C929.798013 
+                                    361.334535 929.798013 239.981676 855.61957 165.804257z"
+                                        fill="#5D5D5D" p-id="2328"></path>
+                                </svg>
+                                <p id="file-name" class="file-nameUpload"></p>
+                                <div title="Remove File"><svg id="delete-icon" t="1689583125934" class="delete-icon"
+                                        viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                                        p-id="2318" width="15" height="15" style="display: none;">
+                                        <path
+                                            d="M928.16 144H736V64a32 32 0 0 0-32-32H320a32 32 0 0 0-32 32v80H95.84a32 32 0 0 0 0 64H129.6l77.92 
+                                            698.656A96 96 0 0 0 302.912 992h418.144a96.032 
+                                           96.032 0 0 0 95.424-85.344L894.4 208h33.728a32 32 0 0 0 0.032-64zM352 96h320v48H352V96z m400.896
+                                           803.552a32 32 0 0 1-31.808 28.448H302.912a32 32 0 0 1-31.808-28.448L193.984 208h636.032l-77.12 691.552z"
+                                            p-id="2319"></path>
+                                        <path
+                                            d="M608 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 
+                                    32 0 0 0 32 32zM432 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 32 0 0 0 32 32z"
+                                            p-id="2320"></path>
+                                    </svg></div>
+                            </div>
+            </div>
+            <!-- <p>&nbsp;</p> -->
+
+
+            <!-- 2.2 Metabolome 上传 -->
+            <div id="file-uploader" class="file-uploader">
+              <div class="file-uploader-icon">
+                <img src="/static/assets/img/metabolite.svg"
+                  style="float: left; margin-right: 10px; width: 70px; height: 70px; margin-top: 50px;">
+                <i class="fas fa-inbox"></i>
+              </div>
+              <p class="file-uploader-text" style="color: black;">Upload Your <strong>Metabolome</strong>
+                File
+              </p>
+              <p class="file-uploader-hint" style="color: #6F6B6B;">
+                The metabolome file should be a tsv/csv matrix of metabolite (compound) concentrations. You can download the <a href="url">example file</a>
+                for reference
+              </p>
+              <input type="file" id="upload2" name="meta_file" class="uploadFile" style="display: none;" onchange="validateFile('upload2')">
+              <button type="button" id="upload-button2" class="upload"
+                                style="background-color: #f2f2f2; color: black;  border: 1px solid black;border-radius: 5px; padding: 6px 12px; ">
+                                <svg t="1689560513482" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" p-id="2933"     id="mx_n_1689560513485"
+                                    width="15" height="15">
+                                        <path         d="M544 201.6a31.552 31.552 0 0 0-32 31.04v434.304a32 32 0 0 0 64 0V232.64a31.552 
+                                    31.552 0 0 0-32-31.04z m0-75.072L329.6 338.112a30.4 30.4 0 0 0 6.4 43.456 32.832 32.832 
+                                        0 0 0 38.4 0L544 214.016 713.6 377.6a31.424 31.424 0 0 0 43.392 1.344l1.408-1.344a29.76 29.76 0 
+                                        0 0 0-42.816zM896 832H192a54.528 54.528 0 0 1-64-64v-119.68a32 32 0 0 1 64 
+                                        0V768h704v-119.68a32 32 0 0 1 64 0V768a67.328 67.328 0 0 1-64 64z"        
+                                        fill="black" p-id="2934"></path>
+                                </svg>
+                                Upload
+                            </button>
+                            <div class="file-name-wrapper" id="file-container">
+                                <svg id="link-icon" class="link-icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" width="15" height="15" style="display: none;">
+                                    <path d="M607.934444 417.856853c-6.179746-6.1777-12.766768-11.746532-19.554358-16.910135l-0.01228 
+                                    0.011256c-6.986111-6.719028-16.47216-10.857279-26.930349-10.857279-21.464871 
+                                    0-38.864146 17.400299-38.864146 38.864146 0 9.497305 3.411703 18.196431 9.071609 24.947182l-0.001023 
+                                    0c0.001023 0.001023 0.00307 0.00307 0.005117 0.004093 2.718925 3.242857 
+                                    5.953595 6.03853 9.585309 8.251941 3.664459 3.021823 7.261381 5.997598 10.624988 
+                                    9.361205l3.203972 3.204995c40.279379 40.229237 28.254507 109.539812-12.024871 149.820214L371.157763 
+                                    796.383956c-40.278355 40.229237-105.761766 40.229237-146.042167 
+                                    0l-3.229554-3.231601c-40.281425-40.278355-40.281425-105.809861 
+                                    0-145.991002l75.93546-75.909877c9.742898-7.733125 15.997346-19.668968 
+                                    15.997346-33.072233 0-23.312962-18.898419-42.211381-42.211381-42.211381-8.797363 0-16.963347 
+                                    2.693342-23.725354 7.297197-0.021489-0.045025-0.044002-0.088004-0.066515-0.134053l-0.809435 0.757247c-2.989077 
+                                    2.148943-5.691629 4.669346-8.025791 7.510044l-78.913281 73.841775c-74.178443 74.229608-74.178443 
+                                    195.632609 0 269.758863l3.203972 3.202948c74.178443 74.127278 195.529255 74.127278 269.707698 
+                                    0l171.829484-171.880649c74.076112-74.17435 
+                                    80.357166-191.184297 6.282077-265.311575L607.934444 417.856853z" fill="#5D5D5D"
+                                        p-id="2327"></path>
+                                    <path
+                                        d="M855.61957 165.804257l-3.203972-3.203972c-74.17742-74.178443-195.528232-74.178443-269.706675 
+                                        0L410.87944 334.479911c-74.178443 
+                                    74.178443-78.263481 181.296089-4.085038 255.522628l3.152806 3.104711c3.368724 3.367701 6.865361 6.54302 
+                                    10.434653 9.588379 2.583848 
+                                    2.885723 5.618974 5.355985 8.992815 7.309476 0.025583 0.020466 0.052189 0.041956 0.077771 
+                                    0.062422l0.011256-0.010233c5.377474 
+                                    3.092431 11.608386 4.870938 18.257829 4.870938 20.263509 0 36.68962-16.428158 36.68962-36.68962 
+                                    0-5.719258-1.309832-11.132548-3.645017-15.95846l0 
+                                    0c-4.850471-10.891048-13.930267-17.521049-20.210297-23.802102l-3.15383-3.102664c-40.278355-40.278355-24.982998-98.79612 
+                                    15.295358-139.074476l171.930791-171.830507c40.179095-40.280402 105.685018-40.280402 145.965419 0l3.206018 
+                                    3.152806c40.279379 
+                                    40.281425 40.279379 105.838513 0 146.06775l-75.686796 75.737962c-10.296507 7.628748-16.97358 19.865443-16.97358 
+                                    33.662681 0 23.12365 18.745946 
+                                    41.87062 41.87062 41.87062 8.048303 0 15.563464-2.275833 21.944801-6.211469 0.048095 0.081864 0.093121 
+                                    0.157589 0.141216 
+                                    0.240477l1.173732-1.083681c3.616364-2.421142 6.828522-5.393847 9.529027-8.792247l79.766718-73.603345C929.798013 
+                                    361.334535 929.798013 239.981676 855.61957 165.804257z"
+                                        fill="#5D5D5D" p-id="2328"></path>
+                                </svg>
+                                <p id="file-name" class="file-nameUpload"></p>
+                                <div title="Remove File"><svg id="delete-icon" t="1689583125934" class="delete-icon"
+                                        viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                                        p-id="2318" width="15" height="15" style="display: none;">
+                                        <path
+                                            d="M928.16 144H736V64a32 32 0 0 0-32-32H320a32 32 0 0 0-32 32v80H95.84a32 32 0 0 0 0 64H129.6l77.92 
+                                            698.656A96 96 0 0 0 302.912 992h418.144a96.032 
+                                           96.032 0 0 0 95.424-85.344L894.4 208h33.728a32 32 0 0 0 0.032-64zM352 96h320v48H352V96z m400.896
+                                           803.552a32 32 0 0 1-31.808 28.448H302.912a32 32 0 0 1-31.808-28.448L193.984 208h636.032l-77.12 691.552z"
+                                            p-id="2319"></path>
+                                        <path
+                                            d="M608 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 
+                                    32 0 0 0 32 32zM432 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 32 0 0 0 32 32z"
+                                            p-id="2320"></path>
+                                    </svg></div>
+                            </div>
+            </div>
+            <!-- <p></br></p> -->
+            <!-- 2.3 提交 -->
+
+            <!-- <p>&nbsp;</p> -->
+
+          </div><!-- /col-lg-6 -->
+
+
+          <!-- 2.3 Annotation上传 -->
+          <div class="col-lg-24 centered" style="padding-left: 0px;display: flex;flex-wrap: wrap;margin-top:20px">
+            <div id="file-uploader" class="file-uploader" >
+              <div class="file-uploader-icon">
+                <img src="/static/assets/img/annotation.png"
+                  style="float: left; margin-right: 10px; width: 70px; height: 70px; margin-top: 50px;">
+                <i class="fas fa-inbox"></i>
+              </div>
+              <p class="file-uploader-text" style="color: black;">Upload Your <strong>Annotation(optional)</strong>
+                File
+              </p>
+              <p class="file-uploader-hint" style="color: #6F6B6B;">
+                The annotation file (tsv/csv) is a functional annotation of genes. You can download the <a href="url">example
+                  file</a>
+                for reference
+              </p>
+              <input type="file" id="upload3" name="annotation_file" class="uploadFile" style="display: none;" onchange="validateFile('upload3')">
+              <button type="button" id="upload-button3" class="upload"
+                                style="background-color: #f2f2f2; color: black;  border: 1px solid black;border-radius: 5px; padding: 6px 12px; ">
+                                <svg t="1689560513482" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" p-id="2933"     id="mx_n_1689560513485"
+                                    width="15" height="15">
+                                        <path         d="M544 201.6a31.552 31.552 0 0 0-32 31.04v434.304a32 32 0 0 0 64 0V232.64a31.552 
+                                    31.552 0 0 0-32-31.04z m0-75.072L329.6 338.112a30.4 30.4 0 0 0 6.4 43.456 32.832 32.832 
+                                        0 0 0 38.4 0L544 214.016 713.6 377.6a31.424 31.424 0 0 0 43.392 1.344l1.408-1.344a29.76 29.76 0 
+                                        0 0 0-42.816zM896 832H192a54.528 54.528 0 0 1-64-64v-119.68a32 32 0 0 1 64 
+                                        0V768h704v-119.68a32 32 0 0 1 64 0V768a67.328 67.328 0 0 1-64 64z"        
+                                        fill="black" p-id="2934"></path>
+                                </svg>
+                                Upload
+                            </button>
+                            <div class="file-name-wrapper" id="file-container">
+                                <svg id="link-icon" class="link-icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" width="15" height="15" style="display: none;">
+                                    <path d="M607.934444 417.856853c-6.179746-6.1777-12.766768-11.746532-19.554358-16.910135l-0.01228 
+                                    0.011256c-6.986111-6.719028-16.47216-10.857279-26.930349-10.857279-21.464871 
+                                    0-38.864146 17.400299-38.864146 38.864146 0 9.497305 3.411703 18.196431 9.071609 24.947182l-0.001023 
+                                    0c0.001023 0.001023 0.00307 0.00307 0.005117 0.004093 2.718925 3.242857 
+                                    5.953595 6.03853 9.585309 8.251941 3.664459 3.021823 7.261381 5.997598 10.624988 
+                                    9.361205l3.203972 3.204995c40.279379 40.229237 28.254507 109.539812-12.024871 149.820214L371.157763 
+                                    796.383956c-40.278355 40.229237-105.761766 40.229237-146.042167 
+                                    0l-3.229554-3.231601c-40.281425-40.278355-40.281425-105.809861 
+                                    0-145.991002l75.93546-75.909877c9.742898-7.733125 15.997346-19.668968 
+                                    15.997346-33.072233 0-23.312962-18.898419-42.211381-42.211381-42.211381-8.797363 0-16.963347 
+                                    2.693342-23.725354 7.297197-0.021489-0.045025-0.044002-0.088004-0.066515-0.134053l-0.809435 0.757247c-2.989077 
+                                    2.148943-5.691629 4.669346-8.025791 7.510044l-78.913281 73.841775c-74.178443 74.229608-74.178443 
+                                    195.632609 0 269.758863l3.203972 3.202948c74.178443 74.127278 195.529255 74.127278 269.707698 
+                                    0l171.829484-171.880649c74.076112-74.17435 
+                                    80.357166-191.184297 6.282077-265.311575L607.934444 417.856853z" fill="#5D5D5D"
+                                        p-id="2327"></path>
+                                   <path
+                                        d="M855.61957 165.804257l-3.203972-3.203972c-74.17742-74.178443-195.528232-74.178443-269.706675 
+                                        0L410.87944 334.479911c-74.178443 
+                                    74.178443-78.263481 181.296089-4.085038 255.522628l3.152806 3.104711c3.368724 3.367701 6.865361 6.54302 
+                                    10.434653 9.588379 2.583848 
+                                    2.885723 5.618974 5.355985 8.992815 7.309476 0.025583 0.020466 0.052189 0.041956 0.077771 
+                                    0.062422l0.011256-0.010233c5.377474 
+                                    3.092431 11.608386 4.870938 18.257829 4.870938 20.263509 0 36.68962-16.428158 36.68962-36.68962 
+                                    0-5.719258-1.309832-11.132548-3.645017-15.95846l0 
+                                    0c-4.850471-10.891048-13.930267-17.521049-20.210297-23.802102l-3.15383-3.102664c-40.278355-40.278355-24.982998-98.79612 
+                                    15.295358-139.074476l171.930791-171.830507c40.179095-40.280402 105.685018-40.280402 145.965419 0l3.206018 
+                                    3.152806c40.279379 
+                                    40.281425 40.279379 105.838513 0 146.06775l-75.686796 75.737962c-10.296507 7.628748-16.97358 19.865443-16.97358 
+                                    33.662681 0 23.12365 18.745946 
+                                    41.87062 41.87062 41.87062 8.048303 0 15.563464-2.275833 21.944801-6.211469 0.048095 0.081864 0.093121 
+                                    0.157589 0.141216 
+                                    0.240477l1.173732-1.083681c3.616364-2.421142 6.828522-5.393847 9.529027-8.792247l79.766718-73.603345C929.798013 
+                                    361.334535 929.798013 239.981676 855.61957 165.804257z"
+                                        fill="#5D5D5D" p-id="2328"></path>
+                                </svg>
+                                <p id="file-name" class="file-nameUpload"></p>
+                                <div title="Remove File"><svg id="delete-icon" t="1689583125934" class="delete-icon"
+                                        viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                                        p-id="2318" width="15" height="15" style="display: none;">
+                                        <path
+                                            d="M928.16 144H736V64a32 32 0 0 0-32-32H320a32 32 0 0 0-32 32v80H95.84a32 32 0 0 0 0 64H129.6l77.92 
+                                            698.656A96 96 0 0 0 302.912 992h418.144a96.032 
+                                           96.032 0 0 0 95.424-85.344L894.4 208h33.728a32 32 0 0 0 0.032-64zM352 96h320v48H352V96z m400.896
+                                           803.552a32 32 0 0 1-31.808 28.448H302.912a32 32 0 0 1-31.808-28.448L193.984 208h636.032l-77.12 691.552z"
+                                            p-id="2319"></path>
+                                        <path
+                                            d="M608 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 
+                                    32 0 0 0 32 32zM432 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 32 0 0 0 32 32z"
+                                            p-id="2320"></path>
+                                    </svg></div>
+                            </div>
+            </div>
+            <!-- <p>&nbsp;</p> -->
+
+
+            <!-- 2.4 Study Design 上传 -->
+            <div id="file-uploader" class="file-uploader" >
+              <div class="file-uploader-icon">
+                <img src="/static/assets/img/study_design.png"
+                  style="float: left; margin-right: 10px; width: 70px; height: 70px; margin-top: 50px;">
+                <i class="fas fa-inbox"></i>
+              </div>
+              <p class="file-uploader-text" style="color: black;">Upload Your <strong>Study Design (optional)</strong>
+                File
+              </p>
+              <p class="file-uploader-hint" style="color: #6F6B6B;">
+                The Study Design is the design of the experiment. You can download the <a href="url">example
+                  file</a> for reference
+              </p>
+              <input type="file" id="upload4" name="design_file" class="uploadFile" style="display: none;" onchange="validateFile('upload4')">
+              <button type="button" id="upload-button4" class="upload"
+                                style="background-color: #f2f2f2; color: black;  border: 1px solid black;border-radius: 5px; padding: 6px 12px; ">
+                                <svg t="1689560513482" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" p-id="2933"     id="mx_n_1689560513485"
+                                    width="15" height="15">
+                                        <path         d="M544 201.6a31.552 31.552 0 0 0-32 31.04v434.304a32 32 0 0 0 64 0V232.64a31.552 
+                                    31.552 0 0 0-32-31.04z m0-75.072L329.6 338.112a30.4 30.4 0 0 0 6.4 43.456 32.832 32.832 
+                                        0 0 0 38.4 0L544 214.016 713.6 377.6a31.424 31.424 0 0 0 43.392 1.344l1.408-1.344a29.76 29.76 0 
+                                        0 0 0-42.816zM896 832H192a54.528 54.528 0 0 1-64-64v-119.68a32 32 0 0 1 64 
+                                        0V768h704v-119.68a32 32 0 0 1 64 0V768a67.328 67.328 0 0 1-64 64z"        
+                                        fill="black" p-id="2934"></path>
+                                </svg>
+                                Upload
+                            </button>
+                            <div class="file-name-wrapper" id="file-container">
+                                <svg id="link-icon" class="link-icon" viewBox="0 0 1024 1024" version="1.1"
+                                    xmlns="http://www.w3.org/2000/svg" width="15" height="15" style="display: none;">
+                                    <path d="M607.934444 417.856853c-6.179746-6.1777-12.766768-11.746532-19.554358-16.910135l-0.01228 
+                                    0.011256c-6.986111-6.719028-16.47216-10.857279-26.930349-10.857279-21.464871 
+                                    0-38.864146 17.400299-38.864146 38.864146 0 9.497305 3.411703 18.196431 9.071609 24.947182l-0.001023 
+                                    0c0.001023 0.001023 0.00307 0.00307 0.005117 0.004093 2.718925 3.242857 
+                                    5.953595 6.03853 9.585309 8.251941 3.664459 3.021823 7.261381 5.997598 10.624988 
+                                    9.361205l3.203972 3.204995c40.279379 40.229237 28.254507 109.539812-12.024871 149.820214L371.157763 
+                                    796.383956c-40.278355 40.229237-105.761766 40.229237-146.042167 
+                                    0l-3.229554-3.231601c-40.281425-40.278355-40.281425-105.809861 
+                                    0-145.991002l75.93546-75.909877c9.742898-7.733125 15.997346-19.668968 
+                                    15.997346-33.072233 0-23.312962-18.898419-42.211381-42.211381-42.211381-8.797363 0-16.963347 
+                                    2.693342-23.725354 7.297197-0.021489-0.045025-0.044002-0.088004-0.066515-0.134053l-0.809435 0.757247c-2.989077 
+                                    2.148943-5.691629 4.669346-8.025791 7.510044l-78.913281 73.841775c-74.178443 74.229608-74.178443 
+                                    195.632609 0 269.758863l3.203972 3.202948c74.178443 74.127278 195.529255 74.127278 269.707698 
+                                    0l171.829484-171.880649c74.076112-74.17435 
+                                    80.357166-191.184297 6.282077-265.311575L607.934444 417.856853z" fill="#5D5D5D"
+                                        p-id="2327"></path>
+                                     <path
+                                        d="M855.61957 165.804257l-3.203972-3.203972c-74.17742-74.178443-195.528232-74.178443-269.706675 
+                                        0L410.87944 334.479911c-74.178443 
+                                    74.178443-78.263481 181.296089-4.085038 255.522628l3.152806 3.104711c3.368724 3.367701 6.865361 6.54302 
+                                    10.434653 9.588379 2.583848 
+                                    2.885723 5.618974 5.355985 8.992815 7.309476 0.025583 0.020466 0.052189 0.041956 0.077771 
+                                    0.062422l0.011256-0.010233c5.377474 
+                                    3.092431 11.608386 4.870938 18.257829 4.870938 20.263509 0 36.68962-16.428158 36.68962-36.68962 
+                                    0-5.719258-1.309832-11.132548-3.645017-15.95846l0 
+                                    0c-4.850471-10.891048-13.930267-17.521049-20.210297-23.802102l-3.15383-3.102664c-40.278355-40.278355-24.982998-98.79612 
+                                    15.295358-139.074476l171.930791-171.830507c40.179095-40.280402 105.685018-40.280402 145.965419 0l3.206018 
+                                    3.152806c40.279379 
+                                    40.281425 40.279379 105.838513 0 146.06775l-75.686796 75.737962c-10.296507 7.628748-16.97358 19.865443-16.97358 
+                                    33.662681 0 23.12365 18.745946 
+                                    41.87062 41.87062 41.87062 8.048303 0 15.563464-2.275833 21.944801-6.211469 0.048095 0.081864 0.093121 
+                                    0.157589 0.141216 
+                                    0.240477l1.173732-1.083681c3.616364-2.421142 6.828522-5.393847 9.529027-8.792247l79.766718-73.603345C929.798013 
+                                    361.334535 929.798013 239.981676 855.61957 165.804257z"
+                                        fill="#5D5D5D" p-id="2328"></path>
+                                </svg>
+                                <p id="file-name" class="file-nameUpload"></p>
+                                <div title="Remove File"><svg id="delete-icon" t="1689583125934" class="delete-icon"
+                                        viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
+                                        p-id="2318" width="15" height="15" style="display: none;">
+                                        <path
+                                            d="M928.16 144H736V64a32 32 0 0 0-32-32H320a32 32 0 0 0-32 32v80H95.84a32 32 0 0 0 0 64H129.6l77.92 
+                                            698.656A96 96 0 0 0 302.912 992h418.144a96.032 
+                                           96.032 0 0 0 95.424-85.344L894.4 208h33.728a32 32 0 0 0 0.032-64zM352 96h320v48H352V96z m400.896
+                                           803.552a32 32 0 0 1-31.808 28.448H302.912a32 32 0 0 1-31.808-28.448L193.984 208h636.032l-77.12 691.552z"
+                                            p-id="2319"></path>
+                                        <path
+                                            d="M608 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 
+                                    32 0 0 0 32 32zM432 820.928a32 32 0 0 0 32-32V319.104a32 32 0 0 0-64 0v469.824a32 32 0 0 0 32 32z"
+                                            p-id="2320"></path>
+                                    </svg></div>
+                                    <input type="hidden" name="file_source" id="file_source" value="0">
+                            </div>
+            </div>
+          </div>
+
+          <p></br></p>
+
+        </div><!-- /row -->
+
+      </div> <!-- /container -->
+    </div><!-- /ww -->
+
+    <!-- form 表单提交 -->
+    <div id="ww" style="height: 190px;padding: 10px 0px;">
+      <div class="container">
+
+        <div class="row">
+          <div class="col-md-4 centered" style="font-size: 18px;height: 40px;line-height: 40px;">
+            <!-- <input type="file" name="file" /> -->
+            <label style="height: 40px;line-height: 40px">Target:&nbsp;&nbsp;</label>
+            <input id="target" type="text" class="name"
+              name="target" style="height: 30px;width: 120px" />
+               <span id="targetElement" style="display: none;"></span> <!-- 用于显示默认值的容器 -->
+          </div>
+          <div class="col-md-4 centered" style="font-size: 18px;height: 40px;line-height: 40px;">
+            <label style="height: 40px;line-height: 40px">Cluster Number:&nbsp;&nbsp;</label>
+            <select name="count" class="count" style="height: 30px;width: 120px" id="count">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+            <span id="countElement" style="display: none;"></span> <!-- 用于显示默认值的容器 -->
+          </div>
+          <div class="col-md-4 centered" style="font-size: 18px;height: 40px;line-height: 40px;">
+            <label style="height: 40px;line-height: 40px">Aggregation Method:&nbsp;&nbsp;</label>
+            <select name="function" class="function" id="function" style="height: 30px;width: 120px">
+              <option value="f1" selected>max</option>
+              <option value="f2">mean</option>
+              <option value="f3">none</option>
+            </select>
+            <span id="functionElement" style="display: none;"></span> <!-- 用于显示默认值的容器 -->
+          </div>
+          <input type="hidden">
+        </div>
+        <div class="row" style="margin-top: 25px;">
+          <div class="col-lg-24 centered"
+            style="font-size: 18px;height: 40px;display: flex;justify-content: space-around;">
+            <button value="Try Example" class="btn bottomBtn" type="button" 
+            style="font-size: inherit; background-color:rgb(5,92,157); color: #fff; border: 1px #000080 solid; border-radius: 5px; padding: 6px 12px;"
+              onclick="tryExample()" title="After clicking the 'Try Example' button, file upload is disabled and can only be enabled again by clicking the 'Submit' or 'Reset' button.">Try
+              Example
+            </button>
+            <input type="submit" value="Submit" class="bottomBtn" onclick="doAlert()"
+            style="font-size: inherit; background-color:rgb(5,92,157); 
+            color: #fff; border: 1px #000080 solid; border-radius: 5px; padding: 6px 12px;" />
+            <button value="Reset" type="button" onclick="formReset()" class="bottomBtn"
+             style="font-size: inherit; background-color:rgb(5,92,157); 
+             color: #fff; border: 1px #000080 solid; border-radius: 5px; padding: 6px 12px;">
+             Reset</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </form>
+
+  <!-- <button value="Try Example" class="btn" onclick="formSubmit()" style="height: 30px;">Try Example</button>
+<button value="Reset" onclick="formReset111()" style="height: 30px;">formReset</button> -->
+
+  <!-- +++++ 3.页脚 +++++ -->
+  <div id="footer" , style="background-color: #055C9D; height: 280px;">
+    <div class="container">
+      <!-- <a href="http://www.guo-lab.site/index.html" style="color: white">Powered by Guo Lab</a> -->
+      <div class="row">
+        <div class="col-lg-12 tighted" style="display: flex;flex-wrap: wrap;justify-content: center;">
+          <div class="mapContainer" style="text-align: right;height: 180px;min-width: 300px;padding-right:10px; color: #003060;">
+            <div id="map-container" style="color: #003060; width: 300px !important;height:150px !important">
+              <script type='text/javascript' id='clustrmaps' src='//cdn.clustrmaps.com/map_v2.js?cl=0e1633&w=300&t=tt&d=4g9OE5un7-QbSo2Sr_VQwwNKlwqhcJjy0KeFvZMEXuk&co=0b4975&cmo=3acc3a&cmn=ff5353&ct=cdd4d9'></script>
+            </div>
+          </div>
+<div class="schoolLogo" style="text-align: left;height: 180px;padding-top: 30px;min-width: 200px;padding-left: 10px">
+    <div>
+        <a href="http://www.pku-iaas.edu.cn">
+            <img src="/static/assets/img/logo1.png" style="width: 70%;">
+        </a>
+    </div>
+    <div>
+        <a href="http://www.pku-iaas.edu.cn">
+            <img src="/static/assets/img/logo2.png" style="width: 200px;margin-right: -50px;margin-top: 10px;">
+        </a>
+        <p>
+            <a href="http://www.guo-lab.site/" style="color: white!important;text-decoration: none!important;">
+                Powered by Guo Lab
+            </a>
+        </p>
+    </div>
+</div>
+
+        </div>
+        <div class="col-lg-12 tighted" style="text-align: right;margin-right: 50px;">
+
+        </div>
+        <!-- <div class="col-lg-4"><a href="http://www.pku-iaas.edu.cn"><img src="assets/img/logo1.png"></a></div>
+    <div class="col-lg-4"><a href="http://www.pku-iaas.edu.cn"><img src="assets/img/logo2.png"></a></div>
+    <div class="col-lg-4"><a href="https://tripal.info"><img src="assets/img/logo3.png" style="width:50%;"></a></div> -->
+      </div>
+    </div>
+  </div>
+  <!-- <form id="tryFormData" autocomplete="off" action="/myapp/CAT_RESULT/" method="post" enctype="multipart/form-data" style="display: none;">
+    <span style="display: none;"> <input type="hidden" name="csrfmiddlewaretoken" value="oZnRTJeWKqF2YpHiXzp0Q9fb2gfMt7o5iTheSqYC5TJK6DvmYmUkKpOPvYWHNIQT"> </span>
+    Target:<input type="text" name="gene_file" id="tryFormGene"><br>
+    Target:<input type="text" name="meta_file" id="tryFormMeta"><br>
+    Target:<input type="text" name="design_file" id="tryFormDesign"><br>
+    Target:<input type="text" name="annotation_file" id="tryFormannot"><br>
+    Target:<input type="text" name="target" id="tryFormTarget"><br>
+    Cluster Count:
+    <select name="count" id="tryFormCount">
+      <option value="1" selected>1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8">8</option>
+      <option value="9">9</option>
+      <option value="10">10</option>
+      <select>
+        <br>
+        Function:
+        <select name="function" id="tryFormFunction">
+          <option value="f1" selected>function1</option>
+          <option value="f2">function2</option>
+          <select>
+            <input type="hidden">
+            <input type="submit" value="Submit" class="bottomBtn" style="font-size: inherit;" />
+            <button value="Try Example" class="btn bottomBtn" type="button" style="font-size: inherit;"
+              onclick="formSubmit()">
+              Try Example
+            </button>
+  </form> -->
+
+
+  <!-- +++++ 4.弹窗 +++++ -->
+  <div id="">
+    <div class="modal" id="mymodal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span
+                class="sr-only">Close</span></button>
+            <h4 class="modal-title">请稍等。。。</h4>
+          </div>
+          <div class="modal-body">
+            <p>模态弹出窗主体内容</p>
+          </div>
+          <!-- <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+          <button type="button" class="btn btn-primary">保存</button>
+        </div> -->
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    <!-- <div class="panel panel-info">...</div> -->
+  </div>
+
+
+  <!-- Bootstrap core JavaScript
+  ================================================== -->
+  <!-- Placed at the end of the document so the pages load faster -->
+  <script src="assets/js/bootstrap.min.js"></script>
+  <script src="file-uploader.js"></script>
+  <!-- 2.4 Upload功能的JS -->
+  
+      <script>
+      <!-- tryExample -->
+        function disableFileUpload() {
+            const fileInputs = document.querySelectorAll('input[type="file"]');
+            for (let i = 0; i < fileInputs.length; i++) {
+                fileInputs[i].disabled = true;
+            }
+        }
+        function enableFileUpload() {
+            const fileInputs = document.querySelectorAll('input[type="file"]');
+            for (let i = 0; i < fileInputs.length; i++) {
+                fileInputs[i].disabled = false;
+            }
+        }
+        function tryExample() {
+            // 设置表单默认值
+            document.getElementById("target").value = "Capsaicin";
+            document.getElementById("count").selectedIndex = 7; // 设置第八个选项为默认选中项，即值为"8"
+            document.getElementById("function").selectedIndex = 0; // 设置第一个选项为默认选中项，即值为"f1"
+    
+            // 显示默认值到对应的位置
+            const targetValue = document.getElementById("target").value;
+            const countValue = document.getElementById("count").options[document.getElementById("count").selectedIndex].text;
+            const functionValue = document.getElementById("function").options[document.getElementById("function").selectedIndex].text;
+    
+            document.getElementById("targetElement").innerText = targetValue;
+            document.getElementById("countElement").innerText = countValue;
+            document.getElementById("functionElement").innerText = functionValue;
+            
+            // 将隐藏元素的值改为 "1"
+            document.getElementById("file_source").value = "1";
+            
+            //展示链接图标集合
+            let linkList = document.getElementsByClassName("link-icon")
+
+            
+            // 显示文件名到对应的位置
+            const filename = ["gene_file.tsv", "meta_file.tsv", "annotation_file.tsv", "design_file.tsv"];
+            const fileElements = document.getElementsByClassName("file-nameUpload");
+            for (let i = 0; i < filename.length; i++) {
+                fileElements[i].innerText = filename[i];
+                linkList[i].style.display = "block";
+            }
+            
+            // 禁用文件上传输入框
+            disableFileUpload();
+
+            // 取消表单提交，防止默认值被覆盖
+            return false;
+        }
+    </script>
+  
+  <script>
+        // 循环处理所有上传文件按钮
+        const fileButtons = document.querySelectorAll('.upload');
+        fileButtons.forEach(button => {
+            button.addEventListener('click', function () {
+                const fieldName = button.dataset.fieldname;
+                openFile(fieldName);
+            });
+        });
+
+        // 验证文件上传
+        function validateFile(fieldName) {
+            const fileInput = document.getElementById(fieldName);
+            const files = fileInput.files;
+            const validExtensions = [".csv", ".tsv"];
+            //const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+
+            if (files.length !== 1) {
+                alert("Please upload one file.");
+                fileInput.value = ""; // 清空文件输入框
+                return false;
+            }
+
+            const file = files[0];
+            const fileName = file.name;
+            const fileExtension = fileName.slice(fileName.lastIndexOf("."));
+            //const fileSize = file.size;
+
+            if (!validExtensions.includes(fileExtension.toLowerCase())) {
+                alert("Invalid file format. Please upload a CSV or TSV file.");
+                fileInput.value = ""; // 清空文件输入框
+                return false;
+             }
+
+            //if (fileSize > maxSize) {
+                //alert("File size exceeds the limit of 5MB. Please upload a smaller file.");
+                //fileInput.value = ""; // 清空文件输入框
+                //return false;
+            //}
+         }
+    </script>
+    
+   <script>
+        // 获取所有的上传按钮和相关元素
+        const uploadButtons = document.querySelectorAll('.upload');
+        const fileContainers = document.querySelectorAll('.file-name-wrapper');
+        const fileNameElements = document.querySelectorAll('.file-nameUpload');
+        const linkIcons = document.querySelectorAll('#link-icon');
+        const deleteIcons = document.querySelectorAll('#delete-icon');
+
+        // 为每个上传按钮绑定事件处理程序
+        for (let i = 0; i < uploadButtons.length; i++) {
+            const uploadButton = uploadButtons[i];
+            const fileContainer = fileContainers[i];
+            const fileNameElement = fileNameElements[i];
+            const linkIcon = linkIcons[i];
+            const deleteIcon = deleteIcons[i];
+
+            // 绑定删除图标的点击事件
+            deleteIcon.addEventListener('click', function () {
+                // 清除上传的文件
+                uploadButton.value = null;
+                fileNameElement.innerHTML = '';
+
+                // 隐藏链接图标和删除图标
+                linkIcon.style.display = 'none';
+                deleteIcon.style.display = 'none';
+
+                // 隐藏盒子
+                fileContainer.style.display = 'none';
+            });
+        }
+    </script>
+  <script>
+    //  上传的附件按钮集合
+        let uploadList = document.getElementsByClassName("upload")
+        // 上传的附件集合
+        let uoloadFileList = document.getElementsByClassName("uploadFile")
+        //  展示附件名称的集合
+        let fileList = document.getElementsByClassName("file-nameUpload")
+        //展示链接图标集合
+        let linkList = document.getElementsByClassName("link-icon")
+        //展示删除图标集合
+        let deleteList = document.getElementsByClassName("delete-icon")
+
+        //给每个上传按钮增加点击事件
+        function buttonClick(i) {
+            console.log(789789789, i)
+            uoloadFileList[i].click();
+            // document.getElementById("upload").click();
+            uoloadFileList[i].value = '';
+        }
+
+        //根据上传的附件
+        function changeList(i, e) {
+            console.log(123123123, e)
+            console.log(123123123, this)
+            // fileList[i].innerHTML = uploadList[i].value;
+            //uploadList[i].style.backgroundColor = "yellow";
+            var file = e.target.files[0];
+            fileList[i].innerHTML = file.name;
+            linkList[i].style.display = "block";
+            deleteList[i].style.display = "block";
+            //document.getElementById("delete-icon").style.display = "block";
+            fileList[i].value = file;
+            fileContainer.style.display = 'flex';
+        }
+
+        //循环绑定上传
+        for (let i = 0; i < uploadList.length; i++) {
+            uploadList[i].addEventListener("click", e => buttonClick(i));
+        }
+        for (let i = 0; i < uploadList.length; i++) {
+            uoloadFileList[i].addEventListener("change", e => changeList(i, e));
+        }
+
+        function formReset() {
+            // $("#mymodal").show();
+            // setTimeout(() => {
+            //     $("#mymodal").hide();
+            // }, 2000);
+            for (let i = 0; i < uploadList.length; i++) {
+                //uploadList[i].style.backgroundColor = "white";
+                fileList[i].innerHTML = "";
+                fileList[i].value = "";
+                linkList[i].style.display = "none";
+                deleteList[i].style.display = "none";
+            }
+            $("select[name=count]").val("");
+            $("select[name=function]").val("");
+            $("input[name=target]").val("");
+            
+            // 开启文件上传输入框
+            enableFileUpload();
+        }
+
+    //function提交表单中的值
+    function formSubmit() {          
+       // 开启文件上传输入框
+       enableFileUpload();
+       var tempform = document.getElementById("tryFormData");
+      // $("#tryFormCount").val("8");
+      // $("#tryFormTarget").val("Capsaicin");
+      // $("#tryFormGene").val("1");
+      // $("#tryFormMeta").val("2");
+      // $("#tryFormDesign").val("3");
+      // $("#tryFormannot").val("4");
+      // $("#tryFormFunction").val("f1");
+
+      // let postData = {
+      //   // meta_file: 'pepper/metabo.tsv',
+      //   // design_file: 'pepper/design.tsv',
+      //   // annotation_file: 'pepper/gene_annotation.tsv',
+      //   target: 'Capsaicin',
+      //   count: 8,
+      //   // f: 'cat.repeat_aggregation_max',
+      //   // csrfmiddlewaretoken: $('[name="csrfmiddlewaretoken"]').val(),
+      // }
+      // for (var x in postData) {
+      //   var opt = document.createElement("textarea");
+      //   opt.name = x;
+      //   opt.value = postData[x];
+      //   tempform.appendChild(opt);
+      // }
+      tempform.submit();
+
+    }
+
+  </script>
+  
+<script>
+    function doAlert() {
+        var target = document.getElementById("target").value;
+        console.log(target);
+        if (fileList[0].innerHTML == '' || fileList[1].innerHTML == '') {
+            event.preventDefault();
+            alert('Incomplete Files');
+        } else if (target == '') {
+            event.preventDefault();
+            alert('Incomplete Parameters');
+        } else {
+            var loading = document.getElementById("LOADING");
+            var body = document.getElementById("body_LOADING");
+            loading.style.display = 'block';
+            body.style.display = 'block';
+        }
+    }
+    
+    
+        window.alert = alert;
+        function alert(data) {
+            // 创建元素
+            var a = document.createElement("div"),
+                div1 = document.createElement("div"),
+                div2 = document.createElement("div"),
+                h3 = document.createElement("h3"),
+                p = document.createElement("p"),
+                btn = document.createElement("div"),
+                h3Text = document.createTextNode("PROMPT");
+                textNode = document.createTextNode(data ? data : ""),
+                btnText = document.createTextNode("COMFIRM");
+            // 控制元素样式
+            css(div1, {
+                "width": "100%",
+                "height": "100%",
+                "position": "fixed",
+                "left": "0",
+                "top": "0",
+                "bottom": "0",
+                "right": "0",
+                "margin": "0 auto",
+                "z-index": "999998",
+                "background-color": "#666666",
+                "opacity": "0.5"
+            });
+            css(div2, {
+                "width": "472px",
+                "height": "160px",
+                "min-height": "160px",
+                "max-height": "500px",
+                "position": "fixed",
+                "background-color": "#fff",
+                "top": "0",
+                "right": "0",
+                "left": "0",
+                "bottom": "0",
+                "margin": "auto",
+                "text-align": "center",
+                "z-index": "999999"
+            });
+            css(h3, {
+                "background": "#003060",
+                "margin": "0",
+                "line-height": "54px",
+                "color": "#fff",
+                "text-align": "center"
+            });
+            css(btn, {
+                "cursor": "pointer",
+                "background-color": "#055c9d",
+                "color": "#ffffff",
+                "border": "1px solid #003060",
+                "width": "102px",
+                "height": "40px",
+                "line-height": "40px",
+                "border-radius": "5px",
+                "margin-left": "40%"
+            });
+            // 内部结构套入
+            h3.appendChild(h3Text);
+            p.appendChild(textNode);
+            btn.appendChild(btnText);
+            div2.appendChild(h3);
+            div2.appendChild(p);
+            div2.appendChild(btn);
+            a.appendChild(div1);
+            a.appendChild(div2);
+            // 整体显示到页面内
+            document.getElementsByTagName("body")[0].appendChild(a);
+    
+            // 确定绑定点击事件删除标签
+            btn.onclick = function() {
+                a.parentNode.removeChild(a);
+            }
+        }
+        function css(targetObj, cssObj) {
+            var str = targetObj.getAttribute("style") ? targetObj.getAttribute("style") : "";
+            for(var i in cssObj) {
+                str += i + ":" + cssObj[i] + ";";
+            }
+            targetObj.style.cssText = str;
+        }
+
+
+</script>
+  
+</body>
+
+</html>
