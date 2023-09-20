@@ -21,7 +21,9 @@ help(your_package_name.your_function_name)
 # Data
 import pandas as pd
 import numpy as np
+
 from statsmodels.tsa.stattools import grangercausalitytests 
+from causal_ccm.causal_ccm import ccm
 import math
 
 from sklearn.preprocessing import MinMaxScaler
@@ -228,9 +230,28 @@ def repeat_aggregation_max(df, design):
     new_df.columns = new_df.columns.map(lambda x: mapping_dict[x] if x in mapping_dict else x)
     
     return new_df
+# 
 
 
+# def repeat_aggregation_mean(df: pd.DataFrame, design: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Aggregate biological replicates by taking the mean value run for each row (gene/compound).
+    
+#     Parameters:
+#         df (pandas DataFrame): The DataFrame to be aggregated.
+#         design (pandas DataFrame): The experimental design DataFrame.
+        
+#     Returns:
+#         new_df (pandas DataFrame): The aggregated DataFrame.
+#     """
+#     # Generate new column names from design DataFrame
+#     new_column_names = {i: design.loc[i]['group'] for i in df.columns}
 
+#     # Rename columns and average by new column names
+#     df.rename(columns=new_column_names, inplace=True)
+#     df = df.T.groupby(level=0).mean().T
+    
+#     return df
 def repeat_aggregation_mean(df: pd.DataFrame, design: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregate biological replicates by taking the mean value run for each row (gene/compound).
@@ -246,10 +267,10 @@ def repeat_aggregation_mean(df: pd.DataFrame, design: pd.DataFrame) -> pd.DataFr
     new_column_names = {i: design.loc[i]['group'] for i in df.columns}
 
     # Rename columns and average by new column names
-    df.rename(columns=new_column_names, inplace=True)
-    df = df.T.groupby(level=0).mean().T
+    df_copy = df.rename(columns=new_column_names)
+    df_copy = df_copy.T.groupby(level=0).mean().T
     
-    return df
+    return df_copy
 
 
 
@@ -481,7 +502,36 @@ def compute_reverse_granger(df, target, maxlag=1):
 
     return results_df
 
+
+
+
+# ****************** CCM *******************************
+def compute_ccm(df, target, E=3, tau=1):
+    # Placeholder for result list
+    results = []
+
+    for name, data in df.iterrows():
+        # Get data from the row (as the name is now the index)
+        data_values = data.values
+
+        # Calculate ccm
+        ccm1 = ccm(data_values, target, tau, E)
+        
+        # Get causality value
+        causality_val = ccm1.causality()[0]
+        
+        # Append to results list
+        results.append([name, causality_val])
+
+    # Convert results list to DataFrame
+    result_df = pd.DataFrame(results, columns=['Name', 'CCM'])
     
+    # Sort by Causality in descending order and reset the index
+    result_df = result_df.sort_values(by='CCM', ascending=False).reset_index(drop=True)
+    
+    return result_df
+
+
 
 # ***************** Spearman *********************
 def compute_spearman(df, target):
@@ -2020,6 +2070,101 @@ def pipeline(gene_file, metabo_file, design_file, annotation_file, target, clust
 
     return result
 
+
+
+
+
+def compute_corr(gene_file, metabo_file, design_file, annotation_file, target, cluster_count, max_lag=1, aggregation_func=None):
+    """
+    This function processes gene expression data, performs computations, and returns results.
+
+    Parameters:
+    - gene_file (str): The filename of the gene count data.
+    - metabo_file (str): The filename of the metabolome data.
+    - design_file (str): The filename of the experimental design data (can be None).
+    - annotation_file (str): The filename of the gene annotation data (can be None).
+    - target (str): The target metabolite for the analysis.
+    - cluster_count (int): The number of clusters for time series clustering.
+    - max_lag (int): The maximum number of lags for Granger causality test (default is 1).
+    - aggregation_func (function): The function to be used for data aggregation.
+
+    Returns:
+    - result (pd.DataFrame): A pandas DataFrame containing the processed results, with annotations and clustering information if provided.
+    """
+    # Read data
+    gene = read_upload(gene_file)
+    metabo = read_upload(metabo_file)
+
+    if design_file is not None:
+        # If there is a design file
+        design = read_upload(design_file)
+        # Process data
+        processed_gene = aggregation_func(gene, design)
+        processed_metabo = aggregation_func(metabo, design)
+        # Get target data
+        t = get_target(target, processed_metabo)
+        # Compute Granger causality
+        granger = compute_granger(processed_gene, t, max_lag)
+        ccm = compute_ccm(processed_gene, t, E=3, tau=1)
+        pearson = compute_pearson(processed_gene, t)
+        # Prepare dataframe for fold change calculation
+        df_for_fc(processed_metabo, target, gene, design)
+        # Compute fold change
+        fc = fc_comp()
+        # Merge data
+        data = merge_dataframes([granger, fc, pearson, ccm])
+
+    else:
+        # If there is no design file
+        t = get_target(target, metabo)
+        noontide = find_noontide(metabo, target)
+        granger = compute_granger(gene, t, max_lag)
+        CCM = compute_ccm(gene, t)
+        pearson = compute_pearson(gene, t)
+        # Compute fold change
+        fc = no_repeat_fc(gene, noontide)
+        data = merge_dataframes([granger, fc, pearson, CCM])
+    
+    # # If there is an annotation file
+    # if annotation_file is not None:
+    #     annotation = read_upload(annotation_file)
+    #     data = merge_dataframes([data, annotation])
+    #     data = annotation_score(data)  # Assuming annotation_score modifies the data based on annotation to be involved in the final score
+    
+    # result = score(data)
+    # # Perform clustering
+    # cluster = ts_clustering(gene, cluster_count)
+    # result = merge_dataframes([result, cluster])
+    # result.set_index('Rank', inplace=True)
+
+    # return result
+    if annotation_file is not None:
+        annotation = read_upload(annotation_file)
+        data = merge_dataframes([data, annotation])
+        data = add_annotation_score(data)  # Add a new column for annotation score
+
+    # result = compute_score(data)
+    # # Perform clustering
+    # cluster = ts_clustering(gene, cluster_count)
+    # result = merge_dataframes([result, cluster])
+    # result.set_index('Rank', inplace=True)
+    data['log2FoldChange'].fillna(0, inplace=True)
+    data['Granger'].fillna(0, inplace=True)
+    data['CCM'].fillna(0, inplace=True)
+    # add a new column ['Score'] to the dataframe
+    # use minmax scaling Granger and log2FoldChange before Euclidean distance
+    model = MinMaxScaler()
+    data['Score'] = model.fit_transform(data['CCM'].values.reshape(-1,1)) + model.fit_transform(data['log2FoldChange'].values.reshape(-1,1))
+    
+    
+    #min-max scaling
+    data['Score'] = model.fit_transform(data['Score'].values.reshape(-1,1))
+    result = data.sort_values(by='Score', ascending=False)
+    # add a new column ['Rank'] to the dataframe
+    result['Rank'] = np.arange(1, len(result)+1)
+    result.set_index('Rank', inplace=True)
+
+    return result
 
 
 
