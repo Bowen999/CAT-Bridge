@@ -3,7 +3,7 @@ Package Name: CAT Bridge (Compounds And Trancrips Bridge)
 Author: Bowen Yang
 email: by8@ualberta
 Homepage: 
-Version: 0.4.1
+Version: 0.5.0
 Description: CAT Bridge (Compounds And Transcripts Bridge) is a robust tool built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data. 
 
 For more detailed information on specific functions or classes, use the help() function on them. For example:
@@ -1034,6 +1034,44 @@ def top_important_features(df, n_top):
         print("An error occurred while computing the top important features.")
         print(str(e))
         return None
+
+
+
+
+
+
+# ****************** Compute Score ***********************
+def compute_modulus(a, b, c=None):
+    if c is None:
+        return (a ** 2 + b ** 2) ** 0.5
+    else:
+        return (a ** 2 + b ** 2 + c ** 2) ** 0.5
+
+def compute_score(df, col):
+    col = str(col)
+    if col == 'Granger':
+        df[col] = 1 - df[col]
+    # Initializing MinMaxScaler
+    scaler = MinMaxScaler()
+    
+    # Fitting and transforming the specified columns
+    df[['norm_col', 'norm_fc']] = scaler.fit_transform(df[[col, 'log2FoldChange']])
+    
+    # If 'Description_Score' column exists in the DataFrame
+    if 'Description_Score' in df.columns:
+        df['Score'] = df.apply(lambda row: compute_modulus(row['norm_col'], row['norm_fc'], row['Description_Score']), axis=1)
+    else:
+        df['Score'] = df.apply(lambda row: compute_modulus(row['norm_col'], row['norm_fc']), axis=1)
+    
+    df.sort_values(by='Score', ascending=False, inplace=True)
+    
+    
+    df['Score'] = MinMaxScaler().fit_transform(df[['Score']])
+    df = df[['Name', col, 'log2FoldChange', 'Cluster', 'Score']]
+    df.reset_index(drop=True, inplace=True)
+    df.index = df.index + 1
+    
+    return df
 
 
 
