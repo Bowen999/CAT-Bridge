@@ -3,7 +3,7 @@ Package Name: CAT Bridge (Compounds And Trancrips Bridge)
 Author: Bowen Yang
 email: by8@ualberta
 Homepage: 
-Version: 0.5.0
+Version: 0.5.1
 Description: CAT Bridge (Compounds And Transcripts Bridge) is a robust tool built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data. 
 
 For more detailed information on specific functions or classes, use the help() function on them. For example:
@@ -838,7 +838,6 @@ def df_for_fc(df1, target, df2, design):
 
 
 def no_repeat_fc(df, noontide):
-    
     """
     Compute the FC score for each metabolite. This function is used for Study Design that has no biological repeats.
     
@@ -847,24 +846,30 @@ def no_repeat_fc(df, noontide):
         noontide (list): The list of the column names of the noontide samples. (can be obtained from find_noontide function)
     
     Returns:
-        df (pandas DataFrame): The DataFrame with the FC score.
+        new_df (pandas DataFrame): A new DataFrame with the FC score.
     """
     
-    df['log2FoldChange'] = df[noontide[0]]/df[noontide[1]]
-    df['log2FoldChange'] = df['log2FoldChange'].apply(lambda x: math.log2(x if x > 0 else np.finfo(float).eps))
+    # Create a new DataFrame as a copy of the original
+    new_df = df.copy()
+    
+    # Compute log2FoldChange
+    new_df['log2FoldChange'] = new_df[noontide[0]] / new_df[noontide[1]]
+    new_df['log2FoldChange'] = new_df['log2FoldChange'].apply(lambda x: math.log2(x if x > 0 else np.finfo(float).eps))
     
     # Replace infinities with 0
-    df.replace([np.inf, -np.inf], 0, inplace=True)
+    new_df.replace([np.inf, -np.inf], 0, inplace=True)
     
     # Replace NaNs with 0
-    df['log2FoldChange'].fillna(0, inplace=True)
+    new_df['log2FoldChange'].fillna(0, inplace=True)
     
-    #make the range of log2FoldChange from 0-1
+    # Make the range of log2FoldChange from 0-1
     scaler = MinMaxScaler()
-    # Apply the scaler to the 'log2FoldChange' column
-    # df['log2FoldChange'] = scaler.fit_transform(df[['log2FoldChange']])
-    df = df[['log2FoldChange']]
-    return df
+    new_df['log2FoldChange'] = scaler.fit_transform(new_df[['log2FoldChange']])
+    
+    # Keep only the 'log2FoldChange' column in the new DataFrame
+    new_df = new_df[['log2FoldChange']]
+    
+    return new_df
 
 
 
@@ -2084,105 +2089,6 @@ def pipeline(gene_file, metabo_file, design_file, annotation_file, target, clust
     result.set_index('Rank', inplace=True)
 
     return result
-
-
-
-
-
-def compute_corr(gene_file, metabo_file, design_file, annotation_file, target, cluster_count, max_lag=1, aggregation_func=None):
-    """
-    This function processes gene expression data, performs computations, and returns results.
-
-    Parameters:
-    - gene_file (str): The filename of the gene count data.
-    - metabo_file (str): The filename of the metabolome data.
-    - design_file (str): The filename of the experimental design data (can be None).
-    - annotation_file (str): The filename of the gene annotation data (can be None).
-    - target (str): The target metabolite for the analysis.
-    - cluster_count (int): The number of clusters for time series clustering.
-    - max_lag (int): The maximum number of lags for Granger causality test (default is 1).
-    - aggregation_func (function): The function to be used for data aggregation.
-
-    Returns:
-    - result (pd.DataFrame): A pandas DataFrame containing the processed results, with annotations and clustering information if provided.
-    """
-    # Read data
-    gene = read_upload(gene_file)
-    metabo = read_upload(metabo_file)
-
-    if design_file is not None:
-        # If there is a design file
-        design = read_upload(design_file)
-        # Process data
-        processed_gene = aggregation_func(gene, design)
-        processed_metabo = aggregation_func(metabo, design)
-        # Get target data
-        t = get_target(target, processed_metabo)
-        # Compute Granger causality
-        granger = compute_granger(processed_gene, t, maxlag)
-        ccm = compute_ccm(processed_gene, t, E=3, tau=1)
-        pearson = compute_pearson(processed_gene, t)
-        # Prepare dataframe for fold change calculation
-        df_for_fc(processed_metabo, target, gene, design)
-        # Compute fold change
-        fc = fc_comp()
-        # Merge data
-        data = merge_dataframes([granger, fc, pearson, ccm])
-
-    else:
-        # If there is no design file
-        t = get_target(target, metabo)
-        noontide = find_noontide(metabo, target)
-        granger = compute_granger(gene, t, max_lag)
-        CCM = compute_ccm(gene, t)
-        pearson = compute_pearson(gene, t)
-        # Compute fold change
-        fc = no_repeat_fc(gene, noontide)
-        data = merge_dataframes([granger, fc, pearson, CCM])
-    
-    # # If there is an annotation file
-    # if annotation_file is not None:
-    #     annotation = read_upload(annotation_file)
-    #     data = merge_dataframes([data, annotation])
-    #     data = annotation_score(data)  # Assuming annotation_score modifies the data based on annotation to be involved in the final score
-    
-    # result = score(data)
-    # # Perform clustering
-    # cluster = ts_clustering(gene, cluster_count)
-    # result = merge_dataframes([result, cluster])
-    # result.set_index('Rank', inplace=True)
-
-    # return result
-    if annotation_file is not None:
-        annotation = read_upload(annotation_file)
-        data = merge_dataframes([data, annotation])
-        data = add_annotation_score(data)  # Add a new column for annotation score
-
-    # result = compute_score(data)
-    # # Perform clustering
-    # cluster = ts_clustering(gene, cluster_count)
-    # result = merge_dataframes([result, cluster])
-    # result.set_index('Rank', inplace=True)
-    data['log2FoldChange'].fillna(0, inplace=True)
-    data['Granger'].fillna(0, inplace=True)
-    data['CCM'].fillna(0, inplace=True)
-    # add a new column ['Score'] to the dataframe
-    # use minmax scaling Granger and log2FoldChange before Euclidean distance
-    model = MinMaxScaler()
-    data['Score'] = model.fit_transform(data['CCM'].values.reshape(-1,1)) + model.fit_transform(data['log2FoldChange'].values.reshape(-1,1))
-    
-    
-    #min-max scaling
-    data['Score'] = model.fit_transform(data['Score'].values.reshape(-1,1))
-    result = data.sort_values(by='Score', ascending=False)
-    # add a new column ['Rank'] to the dataframe
-    result['Rank'] = np.arange(1, len(result)+1)
-    result.set_index('Rank', inplace=True)
-
-    return result
-
-
-
 
 
 
