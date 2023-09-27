@@ -1072,7 +1072,7 @@ def compute_score(df, col):
     
     
     df['Score'] = MinMaxScaler().fit_transform(df[['Score']])
-    df = df[['Name', col, 'log2FoldChange', 'Cluster', 'Score']]
+    df = df[['Name', 'CCM', 'Granger', 'CCA', 'DTW', 'CCF', 'Spearman', 'Pearson', 'log2FoldChange', 'Cluster', 'Score']]
     df.reset_index(drop=True, inplace=True)
     df.index = df.index + 1
     
@@ -1226,6 +1226,82 @@ def plot_heatmap(dataframe, palette='vlag', figsize=(6, 8), row_threshold=50, n_
         print(f"An error occurred: {e}")
 
 # ********************* PCA ****************************
+# def plot_pca(gene, design, n_clusters, save_path=None):
+#     """
+#     Perform PCA on the gene expression data, and plot the result.
+    
+#     Parameters:
+#         gene: the gene expression dataframe
+#         design: the design dataframe
+#         n_clusters: the number of clusters to use in K-means clustering
+#     """
+#     try:
+#         # Transpose your DataFrame, as PCA works on the features (columns), not on the samples (rows)
+#         gene_transposed = gene.T
+
+#         # Perform PCA on your data
+#         pca = PCA(n_components=2)  # here we ask for the first two principal components
+#         pca_result = pca.fit_transform(gene_transposed)
+
+#         # Convert the PCA result to a DataFrame
+#         pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
+
+#         # Add a 'sample' column
+#         pca_df['sample'] = gene_transposed.index
+
+#         # Get group information from the design dataframe
+#         pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
+
+#         fig, ax = plt.subplots(figsize=(6, 8))
+
+#         if n_clusters > 0:
+#             # Perform K-means clustering
+#             kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(pca_df[['PC1', 'PC2']])
+#             pca_df['Cluster'] = kmeans.labels_
+
+#             # Plot the points on the scatterplot
+#             scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+
+#             # For each cluster, add a circle at the mean coordinates with radius proportional to the standard deviation
+#             for cluster in set(kmeans.labels_):
+#                 cluster_points = pca_df[pca_df['Cluster'] == cluster][['PC1', 'PC2']]
+#                 # Calculate mean and standard deviation for the cluster
+#                 cluster_mean = cluster_points.mean().values
+#                 cluster_std = cluster_points.std().values
+#                 # Add a circle at the mean coordinates with radius=stddev
+#                 circle = Circle(cluster_mean, np.linalg.norm(cluster_std), alpha=0.1)
+#                 ax.add_artist(circle)
+#         else:
+#             # Plot the points on the scatterplot without clustering
+#             scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+
+#         # Check if the legend exists before trying to remove it
+#         legend = ax.get_legend()
+#         if legend is not None:
+#             legend.remove()
+
+#         # Annotate points on the graph with the sample names
+#         texts = []
+#         for i, sample in enumerate(pca_df['sample']):
+#             texts.append(plt.text(pca_df.iloc[i].PC1, pca_df.iloc[i].PC2, sample, color='gray'))
+            
+#         # Adjust the labels to avoid overlap
+#         adjust_text(texts)
+
+#         plt.xlabel('PC1')
+#         plt.ylabel('PC2')
+#         # plt.title('PCA', fontweight='bold')
+
+#         # Hide X and Y values
+#         plt.xticks([])
+#         plt.yticks([])
+        
+#         if save_path:
+#             plt.savefig(save_path)
+#         else:
+#             plt.show()
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
 def plot_pca(gene, design, n_clusters, save_path=None):
     """
     Perform PCA on the gene expression data, and plot the result.
@@ -1236,63 +1312,46 @@ def plot_pca(gene, design, n_clusters, save_path=None):
         n_clusters: the number of clusters to use in K-means clustering
     """
     try:
-        # Transpose your DataFrame, as PCA works on the features (columns), not on the samples (rows)
         gene_transposed = gene.T
-
-        # Perform PCA on your data
-        pca = PCA(n_components=2)  # here we ask for the first two principal components
+        pca = PCA(n_components=2)
         pca_result = pca.fit_transform(gene_transposed)
-
-        # Convert the PCA result to a DataFrame
         pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
-
-        # Add a 'sample' column
         pca_df['sample'] = gene_transposed.index
-
-        # Get group information from the design dataframe
-        pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
-
+        
+        if design is not None:
+            pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
+            hue_column = 'group'
+        else:
+            pca_df['unique_colors'] = pca_df.index
+            hue_column = 'unique_colors'
+        
         fig, ax = plt.subplots(figsize=(6, 8))
-
+        
         if n_clusters > 0:
-            # Perform K-means clustering
             kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(pca_df[['PC1', 'PC2']])
             pca_df['Cluster'] = kmeans.labels_
-
-            # Plot the points on the scatterplot
-            scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
-
-            # For each cluster, add a circle at the mean coordinates with radius proportional to the standard deviation
+            scatter = sns.scatterplot(x="PC1", y="PC2", hue=hue_column, data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
             for cluster in set(kmeans.labels_):
                 cluster_points = pca_df[pca_df['Cluster'] == cluster][['PC1', 'PC2']]
-                # Calculate mean and standard deviation for the cluster
                 cluster_mean = cluster_points.mean().values
                 cluster_std = cluster_points.std().values
-                # Add a circle at the mean coordinates with radius=stddev
                 circle = Circle(cluster_mean, np.linalg.norm(cluster_std), alpha=0.1)
                 ax.add_artist(circle)
         else:
-            # Plot the points on the scatterplot without clustering
-            scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
-
-        # Check if the legend exists before trying to remove it
+            scatter = sns.scatterplot(x="PC1", y="PC2", hue=hue_column, data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+        
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-
-        # Annotate points on the graph with the sample names
+        
         texts = []
         for i, sample in enumerate(pca_df['sample']):
             texts.append(plt.text(pca_df.iloc[i].PC1, pca_df.iloc[i].PC2, sample, color='gray'))
             
-        # Adjust the labels to avoid overlap
         adjust_text(texts)
-
+        
         plt.xlabel('PC1')
         plt.ylabel('PC2')
-        # plt.title('PCA', fontweight='bold')
-
-        # Hide X and Y values
         plt.xticks([])
         plt.yticks([])
         
@@ -1302,6 +1361,9 @@ def plot_pca(gene, design, n_clusters, save_path=None):
             plt.show()
     except Exception as e:
         print(f"An error occurred: {e}")
+
+
+
 
 
 
@@ -1745,7 +1807,6 @@ def save_table_as_svg(df, save_path=None):
         plt.savefig(save_path)
     else:
         plt.show()
-
    
 
 
