@@ -3,7 +3,7 @@ Package Name: CAT Bridge (Compounds And Trancrips Bridge)
 Author: Bowen Yang
 email: by8@ualberta
 Homepage: 
-Version: 0.5.1
+Version: 0.5.3
 Description: CAT Bridge (Compounds And Transcripts Bridge) is a robust tool built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data. 
 
 For more detailed information on specific functions or classes, use the help() function on them. For example:
@@ -863,8 +863,8 @@ def no_repeat_fc(df, noontide):
     new_df['log2FoldChange'].fillna(0, inplace=True)
     
     # Make the range of log2FoldChange from 0-1
-    scaler = MinMaxScaler()
-    new_df['log2FoldChange'] = scaler.fit_transform(new_df[['log2FoldChange']])
+    # scaler = MinMaxScaler()
+    # new_df['log2FoldChange'] = scaler.fit_transform(new_df[['log2FoldChange']])
     
     # Keep only the 'log2FoldChange' column in the new DataFrame
     new_df = new_df[['log2FoldChange']]
@@ -1072,7 +1072,7 @@ def compute_score(df, col):
     
     
     df['Score'] = MinMaxScaler().fit_transform(df[['Score']])
-    df = df[['Name', 'CCM', 'Granger', 'CCA', 'DTW', 'CCF', 'Spearman', 'Pearson', 'log2FoldChange', 'Cluster', 'Score']]
+    df = df[['Name', col, 'log2FoldChange', 'Cluster', 'Score']]
     df.reset_index(drop=True, inplace=True)
     df.index = df.index + 1
     
@@ -1226,82 +1226,6 @@ def plot_heatmap(dataframe, palette='vlag', figsize=(6, 8), row_threshold=50, n_
         print(f"An error occurred: {e}")
 
 # ********************* PCA ****************************
-# def plot_pca(gene, design, n_clusters, save_path=None):
-#     """
-#     Perform PCA on the gene expression data, and plot the result.
-    
-#     Parameters:
-#         gene: the gene expression dataframe
-#         design: the design dataframe
-#         n_clusters: the number of clusters to use in K-means clustering
-#     """
-#     try:
-#         # Transpose your DataFrame, as PCA works on the features (columns), not on the samples (rows)
-#         gene_transposed = gene.T
-
-#         # Perform PCA on your data
-#         pca = PCA(n_components=2)  # here we ask for the first two principal components
-#         pca_result = pca.fit_transform(gene_transposed)
-
-#         # Convert the PCA result to a DataFrame
-#         pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
-
-#         # Add a 'sample' column
-#         pca_df['sample'] = gene_transposed.index
-
-#         # Get group information from the design dataframe
-#         pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
-
-#         fig, ax = plt.subplots(figsize=(6, 8))
-
-#         if n_clusters > 0:
-#             # Perform K-means clustering
-#             kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(pca_df[['PC1', 'PC2']])
-#             pca_df['Cluster'] = kmeans.labels_
-
-#             # Plot the points on the scatterplot
-#             scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
-
-#             # For each cluster, add a circle at the mean coordinates with radius proportional to the standard deviation
-#             for cluster in set(kmeans.labels_):
-#                 cluster_points = pca_df[pca_df['Cluster'] == cluster][['PC1', 'PC2']]
-#                 # Calculate mean and standard deviation for the cluster
-#                 cluster_mean = cluster_points.mean().values
-#                 cluster_std = cluster_points.std().values
-#                 # Add a circle at the mean coordinates with radius=stddev
-#                 circle = Circle(cluster_mean, np.linalg.norm(cluster_std), alpha=0.1)
-#                 ax.add_artist(circle)
-#         else:
-#             # Plot the points on the scatterplot without clustering
-#             scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
-
-#         # Check if the legend exists before trying to remove it
-#         legend = ax.get_legend()
-#         if legend is not None:
-#             legend.remove()
-
-#         # Annotate points on the graph with the sample names
-#         texts = []
-#         for i, sample in enumerate(pca_df['sample']):
-#             texts.append(plt.text(pca_df.iloc[i].PC1, pca_df.iloc[i].PC2, sample, color='gray'))
-            
-#         # Adjust the labels to avoid overlap
-#         adjust_text(texts)
-
-#         plt.xlabel('PC1')
-#         plt.ylabel('PC2')
-#         # plt.title('PCA', fontweight='bold')
-
-#         # Hide X and Y values
-#         plt.xticks([])
-#         plt.yticks([])
-        
-#         if save_path:
-#             plt.savefig(save_path)
-#         else:
-#             plt.show()
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
 def plot_pca(gene, design, n_clusters, save_path=None):
     """
     Perform PCA on the gene expression data, and plot the result.
@@ -1312,46 +1236,63 @@ def plot_pca(gene, design, n_clusters, save_path=None):
         n_clusters: the number of clusters to use in K-means clustering
     """
     try:
+        # Transpose your DataFrame, as PCA works on the features (columns), not on the samples (rows)
         gene_transposed = gene.T
-        pca = PCA(n_components=2)
+
+        # Perform PCA on your data
+        pca = PCA(n_components=2)  # here we ask for the first two principal components
         pca_result = pca.fit_transform(gene_transposed)
+
+        # Convert the PCA result to a DataFrame
         pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
+
+        # Add a 'sample' column
         pca_df['sample'] = gene_transposed.index
-        
-        if design is not None:
-            pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
-            hue_column = 'group'
-        else:
-            pca_df['unique_colors'] = pca_df.index
-            hue_column = 'unique_colors'
-        
+
+        # Get group information from the design dataframe
+        pca_df = pca_df.merge(design[['group']], left_on='sample', right_index=True)
+
         fig, ax = plt.subplots(figsize=(6, 8))
-        
+
         if n_clusters > 0:
+            # Perform K-means clustering
             kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(pca_df[['PC1', 'PC2']])
             pca_df['Cluster'] = kmeans.labels_
-            scatter = sns.scatterplot(x="PC1", y="PC2", hue=hue_column, data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+
+            # Plot the points on the scatterplot
+            scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+
+            # For each cluster, add a circle at the mean coordinates with radius proportional to the standard deviation
             for cluster in set(kmeans.labels_):
                 cluster_points = pca_df[pca_df['Cluster'] == cluster][['PC1', 'PC2']]
+                # Calculate mean and standard deviation for the cluster
                 cluster_mean = cluster_points.mean().values
                 cluster_std = cluster_points.std().values
+                # Add a circle at the mean coordinates with radius=stddev
                 circle = Circle(cluster_mean, np.linalg.norm(cluster_std), alpha=0.1)
                 ax.add_artist(circle)
         else:
-            scatter = sns.scatterplot(x="PC1", y="PC2", hue=hue_column, data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
-        
+            # Plot the points on the scatterplot without clustering
+            scatter = sns.scatterplot(x="PC1", y="PC2", hue="group", data=pca_df, palette="Paired", s=100, alpha=0.7, ax=ax)
+
+        # Check if the legend exists before trying to remove it
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-        
+
+        # Annotate points on the graph with the sample names
         texts = []
         for i, sample in enumerate(pca_df['sample']):
             texts.append(plt.text(pca_df.iloc[i].PC1, pca_df.iloc[i].PC2, sample, color='gray'))
             
+        # Adjust the labels to avoid overlap
         adjust_text(texts)
-        
+
         plt.xlabel('PC1')
         plt.ylabel('PC2')
+        # plt.title('PCA', fontweight='bold')
+
+        # Hide X and Y values
         plt.xticks([])
         plt.yticks([])
         
@@ -1361,9 +1302,6 @@ def plot_pca(gene, design, n_clusters, save_path=None):
             plt.show()
     except Exception as e:
         print(f"An error occurred: {e}")
-
-
-
 
 
 
@@ -1807,6 +1745,7 @@ def save_table_as_svg(df, save_path=None):
         plt.savefig(save_path)
     else:
         plt.show()
+
    
 
 
@@ -1942,53 +1881,7 @@ def plot_result(result, score_column, log2FoldChange_column, Granger_column, sav
 
 
 # AI
-# def Yuanfang(df, target):
-#     """
-#     Use OpenAI's API to generate a question for the user to answer.
-#     Question: Which one may be involved in the synthesis of target?
-    
-#     Parameters:
-#         df: the dataframe containing the similarity data
-#         target: the target node
-#     """
-#     # annotation = read_upload(annotation_file)
-#     # df = merge_dataframes([df, annotation])
-#     df = df.head(20)
-    
-#     #if 'Description' in df.columns, is 'Descripton is not in df.columns, then use 'Name'
-#     if 'Description' in df.columns:
-#         hits = df['Description'].to_list()
-#     else:
-#         hits = df['Name'].to_list()
-#     # hits = df['Description'].to_list()
-    
-#     hits = [str(item) for item in hits]
-#     hits = ', '.join(hits)
-    
-#     q = hits + '\n\n\nWhich one may be involved in the synthesis of ' + target + '?'
-    
-#     openai_api_key = getpass.getpass("Please enter your OpenAI API Key: ")
-#     openai.api_key = openai_api_key
-
-#     messages = [
-#         {"role": "system", "content": "You are a biological chemist and can explain biological mechanisms"},
-#         {"role": "user", "content": q}
-#     ]
-
-#     completion = openai.ChatCompletion.create(
-#         model = "gpt-3.5-turbo",
-#         temperature = 0.8,
-#         max_tokens = 2000,
-#         messages = messages
-#     )
-    
-#     print(' ')
-#     print(completion.choices[0].message.content)
-#     print(' ')
-#     print(' ')
-#     print('NOTICE: The output was produced by the large language model GPT 3.5 turbo, so it should only be regarded as a source of inspiration.')
-
-def Yuanfang(df, target, output_path=None):
+def Yuanfang(df, target, annotation_file, output_path=None):
     """
     Use OpenAI's API to generate a question for the user to answer.
     Question: Which one may be involved in the synthesis of target?
@@ -1998,8 +1891,10 @@ def Yuanfang(df, target, output_path=None):
         target: the target node
         output_path: (optional) path to save the output as a .txt file
     """
-    df = df.head(50)
     
+    annotaion = read_upload(annotation_file)
+    df = pd.merge(df, annotaion, left_on='Name', right_index=True, how='left')
+    df = df.head(100)
     if 'Description' not in df.columns:
         error_message = "Please provide a gene annotation file to use this feature. For how to obtain it, please refer to: http://www.catbridge.work/myapp/tutorial/"
         if output_path:
@@ -2009,8 +1904,8 @@ def Yuanfang(df, target, output_path=None):
             print(error_message)
         return
 
-    hits = df['Description'].to_list()
-    hits = [str(item) for item in hits]
+    # Combining 'Name' and 'Description' columns
+    hits = [f"{name}({desc})" for name, desc in zip(df['Name'], df['Description'])]
     hits = ', '.join(hits)
     
     q = hits + '\n\n\nWhich one may be involved in the synthesis of ' + target + '?'
@@ -2039,13 +1934,6 @@ def Yuanfang(df, target, output_path=None):
     else:
         # Print the output
         print(output_content)
-
-
-
-
-
-
-
 
 
 
@@ -2177,7 +2065,7 @@ def compute_corr(
     - cluster_count (int): Number of clusters for time series clustering.
     - aggregation_func (callable, optional): Function for data aggregation. Default is None.
     - lag (int, optional): Maximum number of lags for Granger causality test. Default is 1.
-    - E (int, optional): The embedding dimension for Convergent Cross Mapping (CCM). Default is 3.
+    - E (int, optional): The embedding dimension for Convergent Cross Mapping (CCM). Default is 3. Imply the complexity of the system.
     - tau (int, optional): The delay for Convergent Cross Mapping (CCM). Default is 1.
     - n_components (int, optional): Number of components for Canonical Correlation Analysis (CCA). Default is 1.
     
@@ -2222,7 +2110,7 @@ def compute_corr(
     
     # Compute corr
     granger_score = compute_granger(processed_gene, t, maxlag=lag)
-    ccm_score = compute_ccm(processed_gene, t, E=3, tau=1)
+    ccm_score = compute_ccm(processed_gene, t, E=E, tau=tau)
     cca_score = compute_cca(processed_gene, t, n_components=1)
     dtw_score = compute_dtw(processed_gene, t)
     ccf_score = compute_ccf(processed_gene, t, lag=1)
