@@ -171,26 +171,6 @@ print(result)
 result1.to_csv("myapp/result/" + position + "/plot/result.csv", index=False)
 
 
-# AI Yunafang
-text_to_save = """Please provide a gene annotation file to use this feature. 
-For how to obtain it, please refer to: http://www.catbridge.work/myapp/tutorial/. 
-
-Due to network reasons, the server sometimes cannot connect to the OpenAI API. 
-You can try to use the Python package version to use this feature."""
-
-# Specify the filename
-filename = "myapp/result/" + position + "/plot/ai.txt"
-
-# Write the text to the file
-with open(filename, 'w') as file:
-    file.write(text_to_save)
-
-
-print()
-print()
-print('******************* result has been computed ****************')
-
-
 
 """
    ___  _         _   
