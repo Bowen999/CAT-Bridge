@@ -1,4 +1,4 @@
 # CAT Brigde
-![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/web/myapp/static/assets/img/cat2.png)
+![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
 
 **[Project website](www.catbridge.work)**
