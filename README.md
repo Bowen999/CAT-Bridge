@@ -1,7 +1,7 @@
 # CAT Brigde
 
 
-[![Maintainer](https://img.shields.io/badge/Maintainer-Bowen Yang-blue.svg)](https://byang.netlify.app)
+[![Maintainer](https://img.shields.io/badge/Maintainer-Bowen_Yang-blue.svg)](https://byang.netlify.app)
 [![PyPI](https://img.shields.io/pypi/v/catbridge.svg)](https://pypi.org/project/catbridge/)
 [![Web Server](https://img.shields.io/website-up-down-green-red/http/www.catbridge.work.svg)](http://www.catbridge.work)
 ![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
