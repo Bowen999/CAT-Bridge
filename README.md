@@ -7,7 +7,6 @@
 
 ## Overview
 CAT Bridge (Compounds And Transcripts Bridge) CAT Bridge is a comprehensive multi-omics integration and analysis tool, It stands out in its ability to identify gene-metabolite pairs with biological association by fusing transcriptomic and metabolomic data. This is accomplished through the combined use of causality modeling and artificial intelligence.
-![CAT Bridge](https://github.com/Bowen999/CAT-Bridge/tree/main/web/myapp/static/assets/img/fig1.png)
 
 
 ## Features
