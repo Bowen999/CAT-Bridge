@@ -10,11 +10,12 @@ CAT Bridge is a state-of-the-art platform designed for analyzing compound-transc
 ![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
 
 ## Features
-- **Comprehensive Workflow**: Supports the entire analysis process, including data preprocessing, association computing, and visualization.
-- **Advanced Statistical Methods**: Incorporates seven statistical algorithms for causality estimation and correlation analysis.
-- **AI Insights**: Utilizes AI to interpret association results, providing deeper insights into gene-metabolite interactions.
-- **Flexible Access**: Available as a web service, standalone application, and Python package, catering to diverse user preferences.
-- **Visualization Tools**: Offers a suite of visualization tools for intuitive data interpretation.
+**Comprehensive Analysis Pipeline**: From data preprocessing to association computing and result presentation, CAT Bridge supports a complete workflow.
+**Diverse Statistical Methods**: Incorporates seven statistical algorithms for causality estimation and correlation calculation, enabling detailed analysis of gene-metabolite pairs.
+**Artificial Intelligence Assistance**: Features an AI agent powered by large language models to interpret association results and provide insights.
+**Multiple Access Options**: Available as a web server, standalone application, and Python library to cater to different user needs.
+**Visualization Tools**: Offers a range of visualization options for data interpretation, including heatmaps, similarity networks, and trend analyses.
+
 
 ## Getting Started
 #### Option 1:
