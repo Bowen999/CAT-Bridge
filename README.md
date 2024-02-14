@@ -4,11 +4,10 @@
 [![Maintainer](https://img.shields.io/badge/Maintainer-Bowen_Yang-blue.svg)](https://byang.netlify.app)
 [![PyPI](https://img.shields.io/pypi/v/catbridge.svg)](https://pypi.org/project/catbridge/)
 [![Web Server](https://img.shields.io/website-CAT_Brdige-down-green-red/http/www.catbridge.work.svg)](http://www.catbridge.work)
-![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
-https://pypi.org/project/catbridge/
 
 ## Overview
 CAT Bridge is a state-of-the-art platform designed for analyzing compound-transcript associations using multi-omics data. By integrating advanced statistical methods and artificial intelligence, it enables researchers to uncover significant associations between genes and metabolites, leveraging longitudinal time-series data for a comprehensive multi-omics analysis.
+![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
 
 ## Features
 - **Comprehensive Workflow**: Supports the entire analysis process, including data preprocessing, association computing, and visualization.
@@ -18,11 +17,17 @@ CAT Bridge is a state-of-the-art platform designed for analyzing compound-transc
 - **Visualization Tools**: Offers a suite of visualization tools for intuitive data interpretation.
 
 ## Getting Started
+#### Option 1:
 - Web Server: [CAT Bridge Web Server](http://www.catbridge.work)
+#### Option 2:
 - Python packge install
 ```
 pip install catbridge
 ```
+
+## Bugs or feature requests
+To inform us of any bugs, please open a new issue or send an email to by8@ualberta.ca
+
 
 ## License
 CAT Bridge © 2023 by Bowen Yang is licensed under CC BY-NC 4.0 
