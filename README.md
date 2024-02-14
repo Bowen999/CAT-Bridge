@@ -32,8 +32,8 @@ To inform us of any bugs, please open a new issue or send an email to by8@ualber
 ## License
 CAT Bridge © 2023 by Bowen Yang is licensed under CC BY-NC 4.0 
 
+CAT Bridge is free for non-commercial use by academic, government, and non-profit/not-for-profit institutions. For more information, please contact with Bowen Yang (by8@ualberta.ca) or Li Guo (li.guo@pku-iaas.edu.cn).
+
+
 ## Citation
-Yang, B., Meng, T., Wang, X., Li, J., Zhao, S., Wang, Y., Yi, S., Zhou, Y., Zhang, Y., Li, L. et al. (2024) CAT Bridge: an efficient toolkit for compound‑transcript association mining from multi‑omics data. bioRxiv, 2024.2001.2021.576587.
-[link](https://www.biorxiv.org/content/biorxiv/early/2024/01/24/2024.01.21.576587.full.pdf)
-
-
+Yang, Bowen, Tan Meng, Xinrui Wang, Jun Li, Shuang Zhao, Yingheng Wang, Shu Yi, Yi Zhou, Yi Zhang, Liang Li, and Li Guo. "Cat Bridge: An Efficient Toolkit for Compound-Transcript Association Mining from Multi-Omics Data." bioRxiv  (2024): 2024.01.21.576587. https://dx.doi.org/10.1101/2024.01.21.576587.
