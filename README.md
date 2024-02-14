@@ -6,15 +6,15 @@
 [![Web Server](https://img.shields.io/website-CAT_Brdige-down-green-red/http/www.catbridge.work.svg)](http://www.catbridge.work)
 
 ## Overview
-CAT Bridge is a state-of-the-art platform designed for analyzing compound-transcript associations using multi-omics data. By integrating advanced statistical methods and artificial intelligence, it enables researchers to uncover significant associations between genes and metabolites, leveraging longitudinal time-series data for a comprehensive multi-omics analysis.
+CAT Bridge (Compounds And Transcripts Bridge) CAT Bridge is a comprehensive multi-omics integration and analysis tool, It stands out in its ability to identify gene-metabolite pairs with biological association by fusing transcriptomic and metabolomic data. This is accomplished through the combined use of causality modeling and artificial intelligence.
 ![logo](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/cat-purple.svg)
 
 ## Features
-**Comprehensive Analysis Pipeline**: From data preprocessing to association computing and result presentation, CAT Bridge supports a complete workflow.
-**Diverse Statistical Methods**: Incorporates seven statistical algorithms for causality estimation and correlation calculation, enabling detailed analysis of gene-metabolite pairs.
-**Artificial Intelligence Assistance**: Features an AI agent powered by large language models to interpret association results and provide insights.
-**Multiple Access Options**: Available as a web server, standalone application, and Python library to cater to different user needs.
-**Visualization Tools**: Offers a range of visualization options for data interpretation, including heatmaps, similarity networks, and trend analyses.
+**Comprehensive Analysis Pipeline**: From data preprocessing to association computing and result presentation, CAT Bridge supports a complete workflow.  
+**Diverse Statistical Methods**: Incorporates seven statistical algorithms for causality estimation and correlation calculation, enabling detailed analysis of gene-metabolite pairs.  
+**Artificial Intelligence Assistance**: Features an AI agent powered by large language models to interpret association results and provide insights.  
+**Multiple Access Options**: Available as a web server, standalone application, and Python library to cater to different user needs.  
+**Visualization Tools**: Offers a range of visualization options for data interpretation, including heatmaps, similarity networks, and trend analyses.  
 
 
 ## Getting Started
