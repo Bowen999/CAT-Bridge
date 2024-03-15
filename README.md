@@ -1,4 +1,4 @@
-# CAT Brigde
+# CAT Bridge
 
 
 [![Maintainer](https://img.shields.io/badge/Maintainer-Bowen_Yang-blue.svg)](https://byang.netlify.app)
