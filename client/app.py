@@ -14,12 +14,12 @@ class MyApp(tk.Tk):
     def create_widgets(self):
         # Load the image file
         img = Image.open("img/logo.png")
-        img = img.resize((200, 150), Image.ANTIALIAS)  # Resize to desired size
+        img = img.resize((200, 160), Image.ANTIALIAS)  # Resize to desired size
         self.logo = ImageTk.PhotoImage(img)
 
         # Add a label to display the image
         self.logo_label = tk.Label(self, image=self.logo)
-        self.logo_label.place(x=250, y=20)
+        self.logo_label.place(x=230, y=20)
 
         labels = ['Transcriptomics', 'Metabolomics', 'Study Design (optional)', 'Gene Annotation(optional)', 'Target', 'Cluster Count', 'Aggregation Function']
         for i, label in enumerate(labels):
@@ -50,6 +50,21 @@ class MyApp(tk.Tk):
         self.function_menu = OptionMenu(self, self.function_variable, "CCM", "Granger", "CCA", "DWT", "CCF", "Spearman", "Pearson")
         self.function_menu.place(x=350, y=380)
 
+        # # Define the style
+        # style = ttk.Style()
+        # style.configure("TButton", font=('Helvetica', 12, 'bold'), background='blue', foreground='black')
+
+        # self.submit_button = ttk.Button(self, text="Submit", command=self.submit, style="TButton")
+        # self.submit_button.place(x=220, y=470)
+
+        # self.reset_button = ttk.Button(self, text="Reset", command=self.reset, style="TButton")
+        # self.reset_button.place(x=320, y=470)
+
+                # Open AI Key Entry
+        tk.Label(self, text="Open AI Key:").place(x=50, y=410)
+        self.ai_key_entry = tk.Entry(self)
+        self.ai_key_entry.place(x=350, y=410)
+
         # Define the style
         style = ttk.Style()
         style.configure("TButton", font=('Helvetica', 12, 'bold'), background='blue', foreground='black')
@@ -74,10 +89,11 @@ class MyApp(tk.Tk):
         target = self.target_entry.get()
         cluster_count = self.count_variable.get()
         f = self.function_variable.get()
+        ai_token = self.ai_key_entry.get()
 
         # Run the script with the specified variables
-        subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f])
-        # print("python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f)
+        subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, ai_token])
+        print("python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, ai_token)
 
     def reset(self):
         # Add your reset code here

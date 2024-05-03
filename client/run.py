@@ -9,6 +9,7 @@ import shutil
 # Ignore the specific RuntimeWarning
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
+import openai
 
 
 
@@ -72,6 +73,12 @@ if design_file == "no":
 else:
     repeat_f = cat.repeat_aggregation_mean
 
+
+ai_if = sys.argv[8]
+if ai_if == "no":
+    ai_token = None
+else:
+    ai_token = ai_if 
 
 
 
@@ -180,6 +187,69 @@ print(result)
 result1.to_csv("result/result.csv", index=False)
 
 
+# def Yuanfang(df, target, annotation_file, output_path=None):
+#     """
+#     Use OpenAI's API to generate a question for the user to answer.
+#     Question: Which one may be involved in the synthesis of target?
+    
+#     Parameters:
+#         df: the dataframe containing the similarity data
+#         target: the target node
+#         output_path: (optional) path to save the output as a .txt file
+#     """
+    
+#     annotaion = read_upload(annotation_file)
+#     df = pd.merge(df, annotaion, left_on='Name', right_index=True, how='left')
+#     df = df.head(100)
+#     if 'Description' not in df.columns:
+#         error_message = "Please provide a gene annotation file to use this feature. For how to obtain it, please refer to: http://www.catbridge.work/myapp/tutorial/"
+#         if output_path:
+#             with open(output_path, 'w') as file:
+#                 file.write(error_message)
+#         else:
+#             print(error_message)
+#         return
+
+#     # Combining 'Name' and 'Description' columns
+#     hits = [f"{name}({desc})" for name, desc in zip(df['Name'], df['Description'])]
+#     hits = ', '.join(hits)
+    
+#     q = hits + '\n\n\nWhich one may be involved in the synthesis of ' + target + '?'
+    
+#     openai_api_key = getpass.getpass("Please enter your OpenAI API Key: ")
+#     openai.api_key = openai_api_key
+
+#     messages = [
+#         {"role": "system", "content": "You are a biological chemist and can explain biological mechanisms"},
+#         {"role": "user", "content": q}
+#     ]
+
+#     completion = openai.ChatCompletion.create(
+#         model = "gpt-3.5-turbo",
+#         temperature = 0.8,
+#         max_tokens = 2000,
+#         messages = messages
+#     )
+    
+#     output_content = '\n' + completion.choices[0].message.content + '\n\n\nNOTICE: The output was produced by the large language model GPT 3.5 turbo, so it should only be regarded as a source of inspiration.'
+    
+#     if output_path:
+#         # Save the output to the specified path
+#         with open(output_path, 'w') as file:
+#             file.write(output_content)
+#     else:
+#         # Print the output
+#         print(output_content)
+
+
+# text_to_save = cat.Yuanfang(result1, target, annotation_file, output_path=None)
+
+# # Specify the filename
+# filename = "/plot/ai.txt"
+
+# # Write the text to the file
+# with open(filename, 'w') as file:
+#     file.write(text_to_save)
 
 print()
 print()
