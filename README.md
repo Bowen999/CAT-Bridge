@@ -1,4 +1,4 @@
-# CAT Brigde
+# CAT Bridge
 
 
 [![Maintainer](https://img.shields.io/badge/Maintainer-Bowen_Yang-blue.svg)](https://byang.netlify.app)
@@ -28,13 +28,6 @@ pip install catbridge
 
 ## Bugs or feature requests
 To inform us of any bugs, please open a new issue or send an email to by8@ualberta.ca
-
-
-## License
-CAT Bridge © 2023 by Bowen Yang is licensed under CC BY-NC 4.0 
-
-CAT Bridge is free for non-commercial use by academic, government, and non-profit/not-for-profit institutions. For more information, please contact with Bowen Yang (by8@ualberta.ca) or Li Guo (li.guo@pku-iaas.edu.cn).
-
 
 ## Citation
 Yang, Bowen, Tan Meng, Xinrui Wang, Jun Li, Shuang Zhao, Yingheng Wang, Shu Yi, Yi Zhou, Yi Zhang, Liang Li, and Li Guo. "Cat Bridge: An Efficient Toolkit for Compound-Transcript Association Mining from Multi-Omics Data." bioRxiv  (2024): 2024.01.21.576587. https://dx.doi.org/10.1101/2024.01.21.576587.
