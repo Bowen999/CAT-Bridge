@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, StringVar, OptionMenu, ttk
+from tkinter import filedialog, messagebox, StringVar, OptionMenu, ttk
 from PIL import Image, ImageTk
 import subprocess
 
@@ -7,21 +7,21 @@ class MyApp(tk.Tk):
     def __init__(self):
         tk.Tk.__init__(self)
 
-        self.geometry("650x530")  # set window size
+        self.geometry("650x600")  # Increased height for new elements
         self.title('CAT Bridge')
         self.create_widgets()
 
     def create_widgets(self):
-        # Load the image file
+        # Load image file
         img = Image.open("img/logo.png")
-        img = img.resize((200, 160), Image.ANTIALIAS)  # Resize to desired size
+        img = img.resize((200, 150), Image.ANTIALIAS)  # Resize to required size
         self.logo = ImageTk.PhotoImage(img)
 
-        # Add a label to display the image
+        # Add label to display image
         self.logo_label = tk.Label(self, image=self.logo)
-        self.logo_label.place(x=230, y=20)
+        self.logo_label.place(x=250, y=20)
 
-        labels = ['Transcriptomics', 'Metabolomics', 'Study Design (optional)', 'Gene Annotation(optional)', 'Target', 'Cluster Count', 'Aggregation Function']
+        labels = ['Transcriptome', 'Metabolome', 'Study Design (optional)', 'Gene Annotation (optional)', 'Target', 'Cluster Count', 'Method', 'OpenAI API Key (optional)']
         for i, label in enumerate(labels):
             tk.Label(self, text=label).place(x=50, y=200 + i * 30)
 
@@ -41,31 +41,19 @@ class MyApp(tk.Tk):
         self.target_entry.place(x=350, y=320)
 
         self.count_variable = StringVar(self)
-        self.count_variable.set("8")  # default value
+        self.count_variable.set("8")  # Default value
         self.count_menu = OptionMenu(self, self.count_variable, *[str(i) for i in range(1, 11)])
         self.count_menu.place(x=350, y=350)
 
         self.function_variable = StringVar(self)
-        self.function_variable.set("CCM")  # default value
+        self.function_variable.set("CCM")  # Default value
         self.function_menu = OptionMenu(self, self.function_variable, "CCM", "Granger", "CCA", "DWT", "CCF", "Spearman", "Pearson")
         self.function_menu.place(x=350, y=380)
 
-        # # Define the style
-        # style = ttk.Style()
-        # style.configure("TButton", font=('Helvetica', 12, 'bold'), background='blue', foreground='black')
+        self.api_key_entry = tk.Entry(self)
+        self.api_key_entry.place(x=350, y=410)
 
-        # self.submit_button = ttk.Button(self, text="Submit", command=self.submit, style="TButton")
-        # self.submit_button.place(x=220, y=470)
-
-        # self.reset_button = ttk.Button(self, text="Reset", command=self.reset, style="TButton")
-        # self.reset_button.place(x=320, y=470)
-
-                # Open AI Key Entry
-        tk.Label(self, text="Open AI Key:").place(x=50, y=410)
-        self.ai_key_entry = tk.Entry(self)
-        self.ai_key_entry.place(x=350, y=410)
-
-        # Define the style
+        # Define style
         style = ttk.Style()
         style.configure("TButton", font=('Helvetica', 12, 'bold'), background='blue', foreground='black')
 
@@ -82,22 +70,48 @@ class MyApp(tk.Tk):
             setattr(self, variable_name, filename)
 
     def submit(self):
-        gene_file = self.gene_file_button['text']
-        metabo_file = self.meta_file_button['text']
-        design_file = self.design_file_button['text']
-        annotation_file = self.annotation_file_button['text']
+        gene_file = self.gene_file_button['text'] or "no"
+        metabo_file = self.meta_file_button['text'] or "no"
+        design_file = self.design_file_button['text'] if self.design_file_button['text'] != "Choose File" else "no"
+        annotation_file = self.annotation_file_button['text'] if self.annotation_file_button['text'] != "Choose File" else "no"
         target = self.target_entry.get()
         cluster_count = self.count_variable.get()
         f = self.function_variable.get()
-        ai_token = self.ai_key_entry.get()
+        api_key = self.api_key_entry.get() if self.api_key_entry.get() else None 
 
-        # Run the script with the specified variables
-        subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, ai_token])
-        print("python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, ai_token)
+        # Check if all required files and fields are filled
+        if not gene_file or not metabo_file or not target:
+            messagebox.showerror("Error", "Transcriptome, Metabolome, and Target are required!")
+            return  # Exit function, do not execute the code below
 
+        # If Study Design or Gene Annotation is empty, use "no"
+        # if not design_file:
+        #     design_file = "no"
+        # if not annotation_file:
+        #     annotation_file = "no"
+
+        # # Run the script
+        # subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, api_key])
+        args = ["python3", "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
+        if api_key:
+            args.append(api_key)
+        
+        try:
+            subprocess.run(args, check=True)
+            messagebox.showinfo("Success", "Task completed successfully!")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"An error occurred while running the script: {e}")
+        
     def reset(self):
-        # Add your reset code here
-        pass
+        # Reset button
+        self.gene_file_button.configure(text="Choose File")
+        self.meta_file_button.configure(text="Choose File")
+        self.design_file_button.configure(text="Choose File")
+        self.annotation_file_button.configure(text="Choose File")
+        self.target_entry.delete(0, tk.END)
+        self.count_variable.set("8")
+        self.function_variable.set("CCM")
+        self.api_key_entry.delete(0, tk.END)
 
 if __name__ == "__main__":
     app = MyApp()

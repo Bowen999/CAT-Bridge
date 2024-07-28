@@ -14,15 +14,22 @@ git clone https://github.com/Bowen999/CAT-Bridge.git
 ```
 
 ## 2.Download Required Packages
+### 2.1 Conda
+
 Before running the application, you need to ensure that all required packages are installed.
 
 ```
-conda install catbridge pandas numpy statsmodels scikit-learn matplotlib seaborn networkx pillow tqdm
-
+conda create -n catbridge python=3.9
+conda activate catbridge
+pip install -r requirements.txt
 ```
+
+### 2.2 Docker
+
 
 
 ## 3.To run the application
+
 Navigate to the directory where you've extracted the CAT-Bridge client files using your terminal or command prompt.
 Execute the following command:
 
@@ -34,7 +41,6 @@ This will start the CAT Bridge client application on your machine.
 
 ## 4.Input and Common Issues
 For guidance on how to input data and FAQ, please refer to the [CAT Bridge tutorial](http://www.catbridge.work/myapp/tutorial/).
-
 
 
 
