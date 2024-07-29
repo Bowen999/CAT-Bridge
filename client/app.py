@@ -92,7 +92,7 @@ class MyApp(tk.Tk):
 
         # # Run the script
         # subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, api_key])
-        args = ["python3", "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
+        args = ["python3.9", "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
         if api_key:
             args.append(api_key)
         
