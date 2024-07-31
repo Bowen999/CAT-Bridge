@@ -1,4 +1,4 @@
-![Front-end](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/front-end.png)
+![Front-end](https://github.com/Bowen999/CAT-Bridge/blob/main/client/img/catbridge.png)
 
 
 ## 1. Download the CAT-Bridge Client
