@@ -17,9 +17,12 @@ git clone https://github.com/Bowen999/CAT-Bridge.git
 
 ## 2. Download Required Enviroment
 
+Before running the application, you need to ensure that all required packages are installed. 
+
 ### 2.1 Conda
 
-Before running the application, you need to ensure that all required packages are installed.
+If you already have Conda installed, you can directly download all the necessary Python packages. This approach is compatible with various computer architectures.
+
 
 ```
 conda create -n catbridge python=3.9
@@ -27,14 +30,31 @@ conda activate catbridge
 pip install -r requirements.txt
 ```
 
+Navigate to the directory where you've extracted the CAT-Bridge client files using your terminal or command prompt.
+Execute the following command:
+
+```
+python3 app.py
+```
+
+
+
 ### 2.2 Docker
-#### 2.2.1 Download docker images and X server
+
+Alternatively, you can use a Docker image to ensure environmental consistency. Follow these steps:
+
+**Pull the Docker Image:**
+
 ```
 docker pull bowen172/cat-bridge:latest
 ```
-To display GUI applications running in Docker on your machine, you need to have an **X server** running on your host. A common choice is **Xming**.
 
-#### 2.2.2 Run
+Note: Since CAT Bridge has a graphical user interface (GUI), you need to configure the X server (A common choice is **Xming**) to properly display the GUI. Ensure that your X server is running and accessible.
+
+
+
+**Run the Docker Container:**
+
 
 ```
 docker run -itd -e DISPLAY=host.docker.internal:0 -v \local\folder\path\of\catbridge\client\:/app bowen172/cat-bridge:latest
@@ -42,32 +62,28 @@ docker run -itd -e DISPLAY=host.docker.internal:0 -v \local\folder\path\of\catbr
 # replcae \local\folder\path\of\catbridge\client with your path
 ```
 
-if only got a code like: 6b6a15f59829272c20e6fe57daccbad44113453972cc0a
+
+
+If the execution results in an output similar to the following code: 6b6a15f59829272c20e6fe57daccbad44113453972cc0a
+
+**Execute the following code to:**
+
 ```
 docker exec -it [your code] /bin/bash
 ```
-then find the app folder and run: 
+
+
+**Then find the app folder and run: **
+
 ```
 python3 app.py
 ```
 
 
 
-## 3. To run the application
-
-Navigate to the directory where you've extracted the CAT-Bridge client files using your terminal or command prompt.
-Execute the following command:
-
-```
-python app.py
-```
-This will start the CAT Bridge client application on your machine.
-
-
-
-## 4.Input and Common Issues
+## 3. Input and Common Issues
 
 For guidance on how to input data and FAQ, please refer to the [CAT Bridge tutorial](http://www.catbridge.work/myapp/tutorial/).
 
-
+If you encounter any issues, please send a emial to by8@ualberta.ca.
 
