@@ -3,7 +3,7 @@ Package Name: CAT Bridge (Compounds And Trancrips Bridge)
 Author: Bowen Yang
 email: by8@ualberta
 Homepage: 
-Version: 0.5.2
+Version: 1.0.0
 Description: CAT Bridge (Compounds And Transcripts Bridge) is a robust tool built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data. 
 
 For more detailed information on specific functions or classes, use the help() function on them. For example:
