@@ -3,7 +3,7 @@ Package Name: CAT Bridge (Compounds And Trancrips Bridge)
 Author: Bowen Yang
 email: by8@ualberta
 Homepage: 
-Version: 0.5.3
+Version: 1.0.0
 Description: CAT Bridge (Compounds And Transcripts Bridge) is a robust tool built with the goal of uncovering biosynthetic mechanisms in multi-omics data, such as identifying genes potentially involved in compound synthesis by incorporating metabolomics and transcriptomics data. 
 
 For more detailed information on specific functions or classes, use the help() function on them. For example:
@@ -33,6 +33,9 @@ from scipy.stats import spearmanr
 from scipy.stats import pearsonr
 from scipy.stats import linregress #linear regression
 
+import pickle as pkl
+from pydeseq2.dds import DeseqDataSet
+from pydeseq2.ds import DeseqStats
 
 
 from sklearn.preprocessing import MinMaxScaler
@@ -816,24 +819,42 @@ def find_noontide(df, row_name):
 
 
 # ********* df for fc ************
+# def df_for_fc(df1, target, df2, design):
+#     """
+#     Gnerate the design matrix and matrix for computing the FC score.
+    
+#     Parameters:
+#         df1 (pandas DataFrame): The DataFrame has been aggregated (processed_metabo).
+#         target (str): The name of the row to be detected (Capsaicin).
+#         df2 (pandas DataFrame): The DataFrame for fc computing (gene).
+#         design (pandas DataFrame): study design, the samle and group information.
+#     """
+#     noontide = find_noontide(df1, target)
+#     design_fc = design[design['group'].isin(noontide)]
+#     matrix_fc = df2[design_fc.index]
+
+#     # Saving to CSV files instead of returning
+#     design_fc.to_csv('result/design_fc.csv')
+#     matrix_fc.to_csv('result/matrix_fc.csv')
 def df_for_fc(df1, target, df2, design):
     """
-    Gnerate the design matrix and matrix for computing the FC score.
+    Generate the design matrix and matrix for computing the FC score.
     
     Parameters:
         df1 (pandas DataFrame): The DataFrame has been aggregated (processed_metabo).
         target (str): The name of the row to be detected (Capsaicin).
         df2 (pandas DataFrame): The DataFrame for fc computing (gene).
-        design (pandas DataFrame): study design, the samle and group information.
+        design (pandas DataFrame): study design, the sample and group information.
+    
+    Returns:
+        volcano_df (pandas DataFrame): Modified matrix for computing FC score.
+        volcano_design (pandas DataFrame): Modified design matrix.
     """
     noontide = find_noontide(df1, target)
-    design_fc = design[design['group'].isin(noontide)]
-    matrix_fc = df2[design_fc.index]
+    volcano_design = design[design['group'].isin(noontide)]
+    volcano_df = df2[volcano_design.index]
 
-    # Saving to CSV files instead of returning
-    design_fc.to_csv('result/design_fc.csv')
-    matrix_fc.to_csv('result/matrix_fc.csv')
-    
+    return volcano_df, volcano_design
     
 
 
@@ -874,19 +895,103 @@ def no_repeat_fc(df, noontide):
 
 
 # ********* FC Compute ********
-def fc_comp():
+# def fc_comp():
+#     """
+#     Compute the fold change using R script(FC.R)
+#     """
+#     result = subprocess.run(['Rscript', 'FC.R'], stdout=subprocess.PIPE)
+#     fc = read_upload('result/fc.csv')
+#     fc.index.name = 'Name'
+#     #for value in fc['log2FoldChange'], do scaling to makeit range from 0-1
+#     scaler = MinMaxScaler()
+#     # Apply the scaler to the 'log2FoldChange' column 
+#     fc['log2FoldChange'] = -1 * fc['log2FoldChange']
+#     # fc['log2FoldChange'] = scaler.fit_transform(fc[['log2FoldChange']])
+#     return fc
+def fc_comp(counts_df, metadata):
     """
-    Compute the fold change using R script(FC.R)
+    Perform a DESeq2 analysis given counts data and metadata.
+    
+    Parameters:
+    - counts_df (DataFrame): The dataframe containing gene counts.
+    - metadata (DataFrame): The dataframe containing sample metadata.
+    
+    Returns:
+    - DataFrame: The results dataframe from the DESeq2 analysis.
     """
-    result = subprocess.run(['Rscript', 'FC.R'], stdout=subprocess.PIPE)
-    fc = read_upload('result/fc.csv')
-    fc.index.name = 'Name'
-    #for value in fc['log2FoldChange'], do scaling to makeit range from 0-1
-    scaler = MinMaxScaler()
-    # Apply the scaler to the 'log2FoldChange' column 
-    fc['log2FoldChange'] = -1 * fc['log2FoldChange']
-    # fc['log2FoldChange'] = scaler.fit_transform(fc[['log2FoldChange']])
+    
+    # Filter genes based on counts
+    counts_df = counts_df.T
+    genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
+    counts_df = counts_df[genes_to_keep]
+    counts_df = counts_df.round().astype(int)
+
+    # Adjust metadata
+    metadata['condition'] = metadata['group']
+
+    # Create and run DESeq2 analysis
+    dds = DeseqDataSet(
+        counts=counts_df,
+        metadata=metadata,
+        design_factors="condition",
+        refit_cooks=True,
+        n_cpus=8,
+    )
+    dds.deseq2()
+
+    # Get and summarize statistics
+    stat_res = DeseqStats(dds, n_cpus=8)
+    stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
+    stat_res.results_df['log2FoldChange'] = -1 * stat_res.results_df['log2FoldChange']
+    
+    return stat_res.results_df
+
+
+
+
+    # """
+    # Computes fold change between gene expression and metabolite data.
+    
+    # Parameters:
+    # - gene_file (str): Path to the file containing gene count data.
+    # - metabo_file (str): Path to the file containing metabolome data.
+    # - design_file (str, optional): Path to the file containing experimental design data. Default is None.
+    # - aggregation_func (callable, optional): Function for data aggregation. Default is None.
+    
+    # Returns:
+    # - fc (pd.DataFrame or float): A DataFrame or scalar value representing the fold change.
+    
+    # Notes:
+    # - The aggregation_func parameter should be a function that takes two arguments: a DataFrame 
+    #   containing data and a DataFrame containing design information, and returns a processed DataFrame.
+    # - If the design_file is provided, the data will be aggregated based on the provided aggregation_func.
+    # """
+
+def compute_fc(
+    gene_file, metabo_file, design_file=None, aggregation_func=None, target=None
+):
+    """
+    ... [rest of the docstring and function]
+    """
+    # Read data
+    gene = read_upload(gene_file)
+    metabo = read_upload(metabo_file)
+    
+    if design_file is not None:
+        design = read_upload(design_file)
+        # Process data
+        processed_gene = aggregation_func(gene, design)
+        processed_metabo = aggregation_func(metabo, design)
+        fc_data = df_for_fc(processed_metabo, target, gene, design)  # Added target
+        fc = fc_comp(fc_data[0], fc_data[1])
+        
+    else:
+        noontide = find_noontide(metabo, target)  # Passed target as row_name
+        fc = no_repeat_fc(gene, noontide)
+    
     return fc
+
+
 
 
 
@@ -1179,6 +1284,9 @@ def plot_line(df, target, save_path=None):
 
 #     except Exception as e:
 #         print(f"An error occurred: {e}")
+        
+
+
 def plot_heatmap(dataframe, palette='vlag', figsize=(6, 8), row_threshold=50, n_clusters=None, save_path=None):
     """
     Plot the heatmap of the dataframe. If the number of rows is greater than row_threshold, row labels are not shown.
@@ -1224,6 +1332,8 @@ def plot_heatmap(dataframe, palette='vlag', figsize=(6, 8), row_threshold=50, n_
 
     except Exception as e:
         print(f"An error occurred: {e}")
+
+
 
 # ********************* PCA ****************************
 def plot_pca(gene, design, n_clusters, save_path=None):
@@ -1354,94 +1464,48 @@ def plot_top_features(df, color='crest', save_path=None):
 
 
 
-# Volcano Plot
-# def plot_volcano(path, lfc_threshold, padj_threshold):
-#     """
-#     path: the path to the csv file
-#     lfc_threshold: the log2 fold change threshold
-#     padj_threshold: the adjusted p-value threshold
-#     """
-#     # Import and preprocess data
-#     fc_for_volcano = pd.read_csv(path)
-#     fc_for_volcano.reset_index(inplace=True)
-#     fc_for_volcano.rename(columns={'index':'Name'}, inplace=True)
-#     gene_exp = fc_for_volcano
-#     gene_exp = gene_exp.dropna(subset=['padj'])
-
-#     # Check if at least 10 gene names exist
-#     genenames = gene_exp['Name'].head(10) if len(gene_exp['Name']) >= 10 else None
-
-#     # Create plot
-#     plt.rcParams['figure.figsize'] = [6, 6]
-#     visuz.GeneExpression.volcano(df=gene_exp, 
-#                                 lfc='log2FoldChange', pv='padj', sign_line=True,
-#                                 lfc_thr=(lfc_threshold, lfc_threshold), pv_thr=(padj_threshold, padj_threshold),
-#                                 plotlegend=True, legendpos='upper right', legendanchor=(1.46,1),
-#                                 color=('maroon','gainsboro','steelblue'), theme='whitesmoke',
-#                                 valpha=1, dotsize=5,
-#                                 geneid = 'Name'
-#                                 # genenames = tuple(genenames) if genenames is not None else None,
-#                                 )
-
-#     # plt.savefig('result/volcano_plot.png')
-#     img = Image.open('volcano.png')  # replace with your image file path if not in the same directory
-    
-#     shutil.move("volcano.png", "result/plot/volcano.png")
-#     if os.path.exists("volcano.png"):
-#         os.remove("volcano.png")
-    
-#     # Create a figure and a set of subplots with specified size
-#     fig, ax = plt.subplots()
-#     # Display the image
-#     ax.imshow(img)
-#     # Remove the axis
-#     ax.axis('off')
-#     # Show the figure
-#     plt.show()
-def plot_volcano(path, lfc_threshold, padj_threshold):
+# V0lcano
+def plot_volcano(df, log2FoldChange_threshold=(2, -2), threshold=2, padj_threshold=0.05, save_path=None):
     """
-    path: the path to the csv file
-    lfc_threshold: the log2 fold change threshold
-    padj_threshold: the adjusted p-value threshold
+    Plot a volcano plot based on the provided dataframe.
+    
+    Parameters:
+    - df (DataFrame): The input dataframe containing 'log2FoldChange' and 'padj' columns.
+    - log2FoldChange_threshold (tuple): A tuple containing the positive and negative thresholds 
+                                        for log2FoldChange. Default is (2, -2).
+    - threshold (float): The threshold for -logFDR. Default is 2.
+    - padj_threshold (float): The p-adjusted threshold value for significance. Default is 0.05.
+    - save_path (str, optional): The path where the plot should be saved. If None, the plot won't be saved. Default is None.
+    
+    Returns:
+    - None: Displays the volcano plot or saves it to the provided path.
     """
-    # Import and preprocess data
-    fc_for_volcano = pd.read_csv(path)
-    fc_for_volcano.reset_index(inplace=True)
-    fc_for_volcano.rename(columns={'index':'Name'}, inplace=True)
-    gene_exp = fc_for_volcano
-    gene_exp = gene_exp.dropna(subset=['padj'])
+    # Set figure size
+    plt.figure(figsize=(10, 6))
 
-    # Check if at least 10 gene names exist
-    genenames = gene_exp['Name'].head(10) if len(gene_exp['Name']) >= 10 else None
+    # For all other points
+    plt.scatter(x=df['log2FoldChange'], y=df['padj'].apply(lambda x: -np.log10(x)), s=10, label="Not significant", color="lightgray", alpha=0.7)
 
-    # Create plot
-    plt.rcParams['figure.figsize'] = [6, 6]
-    visuz.GeneExpression.volcano(df=gene_exp, 
-                                lfc='log2FoldChange', pv='padj', sign_line=True,
-                                lfc_thr=(lfc_threshold, lfc_threshold), pv_thr=(padj_threshold, padj_threshold),
-                                plotlegend=True, legendpos='upper right', legendanchor=(1.46,1),
-                                color=('maroon','gainsboro','steelblue'), theme='whitesmoke',
-                                valpha=1, dotsize=5,
-                                geneid = 'Name'
-                                # genenames = tuple(genenames) if genenames is not None else None,
-                                )
+    # Highlight down- or up- regulated genes
+    down = df[(df['log2FoldChange'] <= log2FoldChange_threshold[1]) & (df['padj'] <= padj_threshold)]
+    up = df[(df['log2FoldChange'] >= log2FoldChange_threshold[0]) & (df['padj'] <= padj_threshold)]
 
-    # plt.savefig('result/volcano_plot.png')
-    img = Image.open('volcano.png')  # replace with your image file path if not in the same directory
-    
-    # shutil.move("volcano.png", "result/plot/volcano.png")
-    # if os.path.exists("volcano.png"):
-    #     os.remove("volcano.png")
-    
-    # Create a figure and a set of subplots with specified size
-    fig, ax = plt.subplots()
-    # Display the image
-    ax.imshow(img)
-    # Remove the axis
-    ax.axis('off')
-    # Show the figure
+    plt.scatter(x=down['log2FoldChange'], y=down['padj'].apply(lambda x: -np.log10(x)), s=25, label="Down-regulated", color="steelblue", alpha=0.7)
+    plt.scatter(x=up['log2FoldChange'], y=up['padj'].apply(lambda x: -np.log10(x)), s=25, label="Up-regulated", color="darkorange", alpha=0.7)
+
+    plt.xlabel("log2FoldChange")
+    plt.ylabel("-logFDR")
+    plt.axvline(log2FoldChange_threshold[1], color="grey", linestyle="--")
+    plt.axvline(log2FoldChange_threshold[0], color="grey", linestyle="--")
+    plt.axhline(threshold, color="grey", linestyle="--")
+    plt.legend()
+
+    # Save the plot if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+    # Display the plot
     plt.show()
-
 
 
 
@@ -1749,55 +1813,159 @@ def save_table_as_svg(df, save_path=None):
    
 
 
-def plot_result(result, score_column, log2FoldChange_column, Granger_column, save_path=None):
-    """
-    Plot the result of the result.
+# def plot_result(result, score_column, log2FoldChange_column, Granger_column, save_path=None):
+#     """
+#     Plot the result of the result.
     
-    Parameters:
-    result (pandas dataframe): result of the pipeline
-    score_column (str): name of the column for x values
-    log2FoldChange_column (str): name of the column for size
-    Granger_column (str): name of the column for color
-    """
-    # Convert categorical column 'Granger' into numerical values for color
-    result['color'] = result[Granger_column].astype('category').cat.codes
+#     Parameters:
+#     result (pandas dataframe): result of the pipeline
+#     score_column (str): name of the column for x values
+#     log2FoldChange_column (str): name of the column for size
+#     Granger_column (str): name of the column for color
+#     """
+#     # Convert categorical column 'Granger' into numerical values for color
+#     result['color'] = result[Granger_column].astype('category').cat.codes
 
-    # Create a new column for size based on 'log2FoldChange', 
-    # you might need to adjust this calculation based on your data
+#     # Create a new column for size based on 'log2FoldChange', 
+#     # you might need to adjust this calculation based on your data
+#     model = MinMaxScaler()
+
+#     #min-max scaling
+#     result[log2FoldChange_column] = model.fit_transform(result[log2FoldChange_column].values.reshape(-1,1))
+#     result['size'] = np.abs(result[log2FoldChange_column]) * 150 
+
+#     # Get color palette
+#     palette = sns.color_palette("crest", as_cmap=True)
+
+#     fig, ax = plt.subplots()
+    
+#     # Set the figure size
+#     fig.set_size_inches(15, 7)
+
+#     # Adjust subplot parameters to give more space to y-labels
+#     plt.subplots_adjust(left=0.2)
+
+#     # Using 'Score' for x values, 'Name' for y labels, color by 'color', and size by 'size'
+#     scatter = ax.scatter(x=result[score_column], y=result['Name'], c=result['color'], s=result['size'], cmap=palette, edgecolor='black')
+
+#     # Invert y axis to have index 1 at the top and the highest index at the bottom
+#     ax.invert_yaxis()
+
+#     # Create a colorbar
+#     cbar = plt.colorbar(scatter)
+#     # cbar.set_label(Granger_column)
+
+#     plt.xlabel(score_column)
+    
+#     if save_path:
+#         plt.savefig(save_path)
+#     else:
+#         plt.show()
+def plot_result(result, score_column, log2FoldChange_column, Granger_column, save_path=None, color_palette="crest", size_scale=150):
+    # """
+    # Function to plot the result of a dataframe with a legend for the Granger_column.
+    
+    # Parameters:
+    # - result (pandas dataframe): DataFrame containing the results of the analysis.
+    # - score_column (str): Column name for x values.
+    # - log2FoldChange_column (str): Column name for determining the size of points.
+    # - Granger_column (str): Column name for determining the color of points.
+    # - save_path (str, optional): Path to save the plot. If None, the plot will be displayed. Defaults to None.
+    # - color_palette (str, optional): Name of the seaborn color palette to use. Defaults to "crest".
+    # - size_scale (float, optional): Scaling factor for the size of points. Defaults to 150.
+    
+    # Adds a legend to the plot that represents the categories from Granger_column.
+    # """
+    # # Ensure 'Granger_column' and 'log2FoldChange_column' are in the DataFrame
+    # if Granger_column not in result.columns or log2FoldChange_column not in result.columns or score_column not in result.columns:
+    #     raise ValueError("One of the specified columns is missing from the DataFrame.")
+
+    # # Handle NaN or infinite values in 'log2FoldChange_column'
+    # result[log2FoldChange_column] = result[log2FoldChange_column].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    # # Scale 'log2FoldChange_column' using MinMaxScaler
+    # model = MinMaxScaler()
+    # result['scaled_log2FoldChange'] = model.fit_transform(result[log2FoldChange_column].values.reshape(-1, 1))
+    
+    # # Calculate size based on 'log2FoldChange', adjusting with the 'size_scale'
+    # result['size'] = np.abs(result['scaled_log2FoldChange']) * size_scale
+
+    # # Get unique categories and corresponding colors
+    # unique_categories = result[Granger_column].unique()
+    # palette = sns.color_palette(color_palette, n_colors=len(unique_categories))
+    # category_color_mapping = dict(zip(unique_categories, palette))
+
+    # fig, ax = plt.subplots()
+    # fig.set_size_inches(15, 7)
+    # plt.subplots_adjust(left=0.2)
+
+    # # Plot each category with its own label and color
+    # for category in unique_categories:
+    #     category_data = result[result[Granger_column] == category]
+    #     ax.scatter(x=category_data[score_column], y=category_data.index, 
+    #                s=category_data['size'], color=category_color_mapping[category], 
+    #                label=category, edgecolor='black')
+    
+    # # Invert y axis
+    # ax.invert_yaxis()
+
+    # # Add legend
+    # ax.legend(title=Granger_column)
+
+    # plt.xlabel(score_column)
+    # plt.ylabel("Index") # Since 'Name' column was not specified, using index as y labels
+
+    # # Save or show plot
+    # if save_path:
+    #     plt.savefig(save_path)
+    # else:
+    #     plt.show()
+
+    # Ensure 'Granger_column' and 'log2FoldChange_column' are in the DataFrame
+    if Granger_column not in result.columns or log2FoldChange_column not in result.columns or score_column not in result.columns:
+        raise ValueError("One of the specified columns is missing from the DataFrame.")
+
+    # Handle NaN or infinite values in 'log2FoldChange_column'
+    result[log2FoldChange_column] = result[log2FoldChange_column].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    # Scale 'log2FoldChange_column' using MinMaxScaler
     model = MinMaxScaler()
+    result['scaled_log2FoldChange'] = model.fit_transform(result[log2FoldChange_column].values.reshape(-1, 1))
+    
+    # Calculate size based on 'log2FoldChange', adjusting with the 'size_scale'
+    result['size'] = np.abs(result['scaled_log2FoldChange']) * size_scale
 
-    #min-max scaling
-    result[log2FoldChange_column] = model.fit_transform(result[log2FoldChange_column].values.reshape(-1,1))
-    result['size'] = np.abs(result[log2FoldChange_column]) * 150 
+    # Normalize Granger_column values between 0 and 1 for color mapping
+    granger_norm = MinMaxScaler()
+    result['Granger_norm'] = granger_norm.fit_transform(result[Granger_column].values.reshape(-1, 1))
 
     # Get color palette
-    palette = sns.color_palette("crest", as_cmap=True)
+    palette = sns.color_palette(color_palette, as_cmap=True)
 
     fig, ax = plt.subplots()
-    
-    # Set the figure size
     fig.set_size_inches(15, 7)
-
-    # Adjust subplot parameters to give more space to y-labels
     plt.subplots_adjust(left=0.2)
 
-    # Using 'Score' for x values, 'Name' for y labels, color by 'color', and size by 'size'
-    scatter = ax.scatter(x=result[score_column], y=result['Name'], c=result['color'], s=result['size'], cmap=palette, edgecolor='black')
-
-    # Invert y axis to have index 1 at the top and the highest index at the bottom
+    # Scatter plot with normalized Granger_column values for color mapping
+    points = ax.scatter(x=result[score_column], y=result['Name'], 
+                        c=result['Granger_norm'], s=result['size'], 
+                        cmap=palette, edgecolor='black')
+    
+    # Invert y axis
     ax.invert_yaxis()
 
-    # Create a colorbar
-    cbar = plt.colorbar(scatter)
+    # Create colorbar based on the normalized Granger_column values
+    cbar = plt.colorbar(points, ax=ax)
     cbar.set_label(Granger_column)
 
     plt.xlabel(score_column)
-    
+    plt.ylabel("Index") # Assuming 'Index' is the desired y-axis label
+
+    # Save or show plot
     if save_path:
         plt.savefig(save_path)
     else:
         plt.show()
-
 
 
 
@@ -1920,12 +2088,12 @@ def Yuanfang(df, target, annotation_file, output_path=None):
 
     completion = openai.ChatCompletion.create(
         model = "gpt-3.5-turbo",
-        temperature = 0.8,
+        temperature = 0.5,
         max_tokens = 2000,
         messages = messages
     )
     
-    output_content = '\n' + completion.choices[0].message.content + '\n\n\nNOTICE: The output was produced by the large language model GPT 3.5 turbo, so it should only be regarded as a source of inspiration.'
+    output_content = '\n' + completion.choices[0].message.content + '\n\n\nNOTICE:  This response is generated by a Large Language Model (GPT 3.5 turbo) and should not be considered as a substitute for professional judgment.  Users are advised to verify the accuracy of the information through rigorous literature review and, where necessary, experimental confirmation.'
     
     if output_path:
         # Save the output to the specified path
@@ -2098,8 +2266,8 @@ def compute_corr(
         processed_gene = aggregation_func(gene, design)
         processed_metabo = aggregation_func(metabo, design)
         t = get_target(target, processed_metabo)
-        df_for_fc(processed_metabo, target, gene, design)
-        fc = fc_comp()
+        fc_data = df_for_fc(processed_metabo, target, gene, design)
+        fc = fc_comp(fc_data[0],fc_data[1])
         
     else:
         t = get_target(target, metabo)
