@@ -187,10 +187,16 @@ print("""
 
 data = cat.compute_corr(gene_file, metabo_file, design_file, annotation_file, target, cluster_count, aggregation_func=repeat_f, lag=1, E=3, tau=1, n_components=1)
 print(data.head(10))
-result1 = cat.compute_score(data, f)
+print(data.columns)
+print()
+result1 = cat.compute_score(data, f_if)
 result = result1.head(20)
 top_100 = result1.head(100)
+print()
 print(result)
+print()
+print(result.columns)
+print()
 # Save result
 result1.to_csv("result/result.csv", index=False)
 
