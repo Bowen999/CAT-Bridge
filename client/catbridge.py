@@ -394,55 +394,68 @@ def merge_and_reduce(df1, df2, n_components):
 def compute_granger(df, target, maxlag=1):
     """
     Compute the Granger causality score for each row in the dataframe.
-    The X is each row in the dataframe and the Y is the target list.
-    The returd value is the p-value of the F test for the maximum lag.
-    
+    The X is each row in the dataframe, and the Y is the target list.
+    The returned value is the p-value of the F-test for the maximum lag.
+
     Parameters:
-        df (pandas DataFrame): The DataFrame to be aggregated.
-        target (list): The target list.
-    
+        df (pandas DataFrame): The DataFrame to be analyzed.
+        target (list): The target time series.
+        maxlag (int): The maximum lag to consider in the Granger causality test.
+
     Returns:
-        index_list (list): The list of row indices.
-    
+        results_df (pandas DataFrame): DataFrame containing row indices and Granger causality p-values.
     """
+
+    # Check if df has fewer than 5 columns or target length < 5
+    if df.shape[1] < 5 or len(target) < 5:
+        return pd.DataFrame({"Name": df.index, "Granger": ["NA (groups<5)"] * len(df)})
+
     # Initialize lists to store results
     index_list = []
     p_value_list = []
 
-    # Loop through each row in the dataframe
+    # Loop through each row in the DataFrame
     for idx, row in df.iterrows():
-        # Skip if the row or the target list has constant values
-        if np.std(row.values) == 0 or np.std(target) == 0:
+        row_values = row.values
+
+        # Check for NaN or constant values in row or target
+        if np.any(pd.isna(row_values)) or np.any(pd.isna(target)):
+            print(f"Skipping {idx} due to NaN values.")
+            continue
+
+        if np.std(row_values) == 0 or np.std(target) == 0:
+            print(f"Skipping {idx} due to constant values.")
             continue
 
         # Combine the row and target into a DataFrame
-        data = pd.concat([pd.Series(target), pd.Series(row.values)], axis=1)
+        data = pd.DataFrame({"target": target, "row": row_values})
 
         # Perform the Granger causality test
         try:
             result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
-
-            # Extract the p-value of the F test for the maximum lag
+            
+            # Extract the p-value of the F-test for the maximum lag
             p_value = result[maxlag][0]['ssr_ftest'][1]
-            # p_value = 1-p_value
 
-            # Append results to the lists
+            # Append results to lists
             index_list.append(idx)
             p_value_list.append(p_value)
+
         except Exception as e:
-            #add NA if there is an error
+            print(f"Error at index {idx}: {e}")
             index_list.append(idx)
             p_value_list.append(np.nan)
-            
-            # print(f"Error at index {idx}: {str(e)}")
 
-    # Create a new dataframe to store results
+    # Create DataFrame to store results
     results_df = pd.DataFrame({
         'Name': index_list,
         'Granger': p_value_list
     })
 
     return results_df
+
+
+
 
 
 def compute_reverse_granger(df, target, maxlag=1):
@@ -517,34 +530,41 @@ def granger_list(A, B, maxlag):
 
 # ****************** 2.2 CCM (Convergent cross mapping)*******************************
 def compute_ccm(df, target, E=3, tau=1):
+    # Check if df has fewer than 5 columns or target length < 5
+    if df.shape[1] < 5 or len(target) < 5:
+        return pd.DataFrame({"Name": df.index, "CCM": ["NA (groups<5)"] * len(df)})
+
     # Placeholder for result list
-    results = [] 
+    results = []
 
     for name, data in df.iterrows():
-        # Get data from the row (as the name is now the index)
+        # Convert row to numpy array
         data_values = data.values
-        
-        if np.any(np.isnan(data_values)) or np.any(np.isnan(target)):
-            print("data_values:", data_values)
-            print("target:", target)
-            continue  # Skip the current iteration if NaN is found
 
+        # Check for NaN in either data_values or target
+        if np.any(pd.isna(data_values)) or np.any(pd.isna(target)):
+            print(f"Skipping {name} due to NaN values.")
+            continue  # Skip if there are NaN values
 
-        # Calculate ccm
-        ccm1 = ccm(data_values, target, tau, E)
-        
-        # Get causality value
-        causality_val = ccm1.causality()[0]
-        
-        # Append to results list
-        results.append([name, causality_val])
+        try:
+            # Calculate CCM
+            ccm1 = ccm(data_values, target, tau, E)  # Ensure 'ccm' function is defined/imported
+            
+            # Extract causality value
+            causality_val = ccm1.causality()[0]
+
+            # Append to results list
+            results.append([name, causality_val])
+
+        except Exception as e:
+            print(f"Error processing {name}: {e}")
 
     # Convert results list to DataFrame
     result_df = pd.DataFrame(results, columns=['Name', 'CCM'])
-    
+
     # Sort by Causality in descending order and reset the index
     result_df = result_df.sort_values(by='CCM', ascending=False).reset_index(drop=True)
-    
+
     return result_df
 
 
@@ -555,16 +575,33 @@ def compute_ccm(df, target, E=3, tau=1):
 
 # ******************** 2.3 CCA (Canonical correlation) ********************
 def compute_cca(df, target, n_components=1):
+    """
+    Compute Canonical Correlation Analysis (CCA) between each row in the DataFrame and the target list.
+    
+    Parameters:
+        df (pandas DataFrame): The DataFrame containing feature rows.
+        target (list): The target list.
+        n_components (int): Number of CCA components to compute.
+
+    Returns:
+        results_df (pandas DataFrame): DataFrame containing row indices and CCA correlation values.
+    """
+
+    # Check if df has fewer than 3 columns or target length < 3
+    if df.shape[1] < 5 or len(target) < 5:
+        return pd.DataFrame({"Name": df.index, "CCA": ["NA (groups<5)"] * len(df)})
+
     # Ensure the target data is 2D (samples x features)
     metabolite_concentration = np.array(target).reshape(-1, 1)
-    results_dict = {"Name": [], "CCA": []}  # Initialize a dictionary to store the results
+
+    # Initialize a dictionary to store the results
+    results_dict = {"Name": [], "CCA": []}
 
     for index, row in df.iterrows():
         # Reshape the gene_expression data to be 2D (samples x features)
         gene_expression = np.array(row).reshape(-1, 1)
 
-        # It's essential to have more than one sample to perform CCA,
-        # so if there's only one sample, append NaN and continue
+        # If there are too few samples, append NaN and continue
         if gene_expression.shape[0] <= 1 or metabolite_concentration.shape[0] <= 1:
             results_dict["Name"].append(index)
             results_dict["CCA"].append(np.nan)
@@ -583,11 +620,13 @@ def compute_cca(df, target, n_components=1):
             results_dict["Name"].append(index)
             results_dict["CCA"].append(correlation)
 
-        except ValueError as e:
+        except Exception as e:
+            print(f"Error at index {index}: {e}")
             results_dict["Name"].append(index)
             results_dict["CCA"].append(np.nan)  # Append NaN for rows causing errors
 
-    return pd.DataFrame(results_dict)  # Convert the results dictionary to a DataFrame and return it
+    # Convert results dictionary to DataFrame and return
+    return pd.DataFrame(results_dict)
 
 
 
@@ -620,8 +659,6 @@ def compute_dtw(df, target):
 
 
 
-
-
 # ************************* 2.5 CCF *****************************
 def compute_ccf(df, target, lag=1):
     results_dict = {"Name": [], "CCF": []}  # Initialize a dictionary to store the results
@@ -649,7 +686,6 @@ def compute_ccf(df, target, lag=1):
             results_dict["CCF"].append(lag_value)
 
     return pd.DataFrame(results_dict)  # Convert the results dictionary to a DataFrame and return it
-
 
 
 
@@ -818,24 +854,7 @@ def find_noontide(df, row_name):
 
 
 
-# ********* df for fc ************
-# def df_for_fc(df1, target, df2, design):
-#     """
-#     Gnerate the design matrix and matrix for computing the FC score.
-    
-#     Parameters:
-#         df1 (pandas DataFrame): The DataFrame has been aggregated (processed_metabo).
-#         target (str): The name of the row to be detected (Capsaicin).
-#         df2 (pandas DataFrame): The DataFrame for fc computing (gene).
-#         design (pandas DataFrame): study design, the samle and group information.
-#     """
-#     noontide = find_noontide(df1, target)
-#     design_fc = design[design['group'].isin(noontide)]
-#     matrix_fc = df2[design_fc.index]
 
-#     # Saving to CSV files instead of returning
-#     design_fc.to_csv('result/design_fc.csv')
-#     matrix_fc.to_csv('result/matrix_fc.csv')
 def df_for_fc(df1, target, df2, design):
     """
     Generate the design matrix and matrix for computing the FC score.
@@ -908,6 +927,44 @@ def no_repeat_fc(df, noontide):
 #     fc['log2FoldChange'] = -1 * fc['log2FoldChange']
 #     # fc['log2FoldChange'] = scaler.fit_transform(fc[['log2FoldChange']])
 #     return fc
+# def fc_comp(counts_df, metadata):
+#     """
+#     Perform a DESeq2 analysis given counts data and metadata.
+    
+#     Parameters:
+#     - counts_df (DataFrame): The dataframe containing gene counts.
+#     - metadata (DataFrame): The dataframe containing sample metadata.
+    
+#     Returns:
+#     - DataFrame: The results dataframe from the DESeq2 analysis.
+#     """
+    
+#     # Filter genes based on counts
+#     counts_df = counts_df.T
+#     genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
+#     counts_df = counts_df[genes_to_keep]
+#     counts_df = counts_df.round().astype(int)
+
+#     # Adjust metadata
+#     metadata['condition'] = metadata['group']
+
+#     # Create and run DESeq2 analysis
+#     dds = DeseqDataSet(
+#         counts=counts_df,
+#         metadata=metadata,
+#         design_factors="condition",
+#         refit_cooks=True
+#     )
+#     dds.deseq2()
+ 
+#     # Get and summarize statistics
+#     stat_res = DeseqStats(dds)
+#     stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
+#     stat_res.results_df['log2FoldChange'] = -1 * stat_res.results_df['log2FoldChange']
+    
+#     return stat_res.results_df
+
+
 def fc_comp(counts_df, metadata):
     """
     Perform a DESeq2 analysis given counts data and metadata.
@@ -920,32 +977,43 @@ def fc_comp(counts_df, metadata):
     - DataFrame: The results dataframe from the DESeq2 analysis.
     """
     
-    # Filter genes based on counts
+    # Transpose the counts dataframe
     counts_df = counts_df.T
+
+    # Filter genes based on counts (keeping only genes with total counts >= 10)
     genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
     counts_df = counts_df[genes_to_keep]
+
+    # Ensure counts are integers
     counts_df = counts_df.round().astype(int)
 
     # Adjust metadata
-    metadata['condition'] = metadata['group']
+    metadata['condition'] = metadata['group']  # Ensure correct column name
 
     # Create and run DESeq2 analysis
     dds = DeseqDataSet(
         counts=counts_df,
         metadata=metadata,
         design_factors="condition",
-        refit_cooks=True,
-        n_cpus=8,
+        refit_cooks=True
     )
     dds.deseq2()
 
+    # Define contrast for differential expression analysis
+    conditions = metadata["condition"].unique()
+    if len(conditions) < 2:
+        raise ValueError("DESeq2 requires at least two conditions for comparison.")
+
+    contrast = ("condition", conditions[0], conditions[1])  # Adjust as needed
+
     # Get and summarize statistics
-    stat_res = DeseqStats(dds, n_cpus=8)
+    stat_res = DeseqStats(dds, contrast=contrast)  # Add contrast argument
     stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
+
+    # Flip the log2FoldChange values if necessary
     stat_res.results_df['log2FoldChange'] = -1 * stat_res.results_df['log2FoldChange']
     
     return stat_res.results_df
-
 
 
 

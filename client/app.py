@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, StringVar, OptionMenu, ttk
 from PIL import Image, ImageTk
 import subprocess
+import shutil
 
 class MyApp(tk.Tk):
     def __init__(self):
@@ -46,8 +47,8 @@ class MyApp(tk.Tk):
         self.count_menu.place(x=350, y=350)
 
         self.function_variable = StringVar(self)
-        self.function_variable.set("CCM")  # Default value
-        self.function_menu = OptionMenu(self, self.function_variable, "CCM", "Granger", "CCA", "DWT", "CCF", "Spearman", "Pearson")
+        self.function_variable.set("CCM (groups>4)")  # Default value
+        self.function_menu = OptionMenu(self, self.function_variable, "CCM (groups>4)", "Granger (groups>4)", "CCA (group>4)", "DWT (group>2)", "CCF (group>2)", "Spearman (group>2)", "Pearson (group>2)")
         self.function_menu.place(x=350, y=380)
 
         self.api_key_entry = tk.Entry(self)
@@ -92,7 +93,13 @@ class MyApp(tk.Tk):
 
         # # Run the script
         # subprocess.run(["python", "run.py", gene_file, metabo_file, design_file, annotation_file, target, cluster_count, f, api_key])
-        args = ["python3.9", "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
+        # args = ["python", "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
+       
+        python_executable = shutil.which("python") or shutil.which("python3.9")
+        if not python_executable:
+            raise RuntimeError("Neither 'python' nor 'python3.9' is available on the system.")
+        args = [python_executable, "run.py", gene_file, metabo_file, design_file or "no", annotation_file or "no", target, cluster_count, f]
+
         if api_key:
             args.append(api_key)
         
