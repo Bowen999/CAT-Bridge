@@ -1,0 +1,17 @@
+# credentials - never commit
+.pypirc
+
+# build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# notebooks / OS
+.ipynb_checkpoints/
+.DS_Store
+
+# local environments
+.venv/
