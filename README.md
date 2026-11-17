@@ -1,33 +1,64 @@
 # CAT Bridge
 
+CAT Bridge (Compounds And Transcripts Bridge) ranks genes by how closely their expression time course follows that of a target metabolite, using longitudinal transcriptomics and metabolomics data. It is also available as a web application at [catbridge.work](https://catbridge.work).
 
-[![Maintainer](https://img.shields.io/badge/Maintainer-Bowen_Yang-blue.svg)](https://byang.netlify.app)
-[![PyPI](https://img.shields.io/pypi/v/catbridge.svg)](https://pypi.org/project/catbridge/)
-[![Web Server](https://img.shields.io/website-CAT_Brdige-down-green-red/http/www.catbridge.work.svg)](http://www.catbridge.work)
+Version 2.0.0. If you used 1.0, see [Upgrading from 1.0](#upgrading-from-10).
 
-## Overview
-CAT Bridge (Compounds And Transcripts Bridge) CAT Bridge is a comprehensive multi-omics integration and analysis tool, It stands out in its ability to identify gene-metabolite pairs with biological association by fusing transcriptomic and metabolomic data. This is accomplished through the combined use of causality modeling and artificial intelligence.
+## Installation
 
-
-## Features
-**Comprehensive Analysis Pipeline**: From data preprocessing to association computing and result presentation, CAT Bridge supports a complete workflow.  
-**Diverse Statistical Methods**: Incorporates seven statistical algorithms for causality estimation and correlation calculation, enabling detailed analysis of gene-metabolite pairs.  
-**Artificial Intelligence Assistance**: Features an AI agent powered by large language models to interpret association results and provide insights.  
-**Multiple Access Options**: Available as a web server, standalone application, and Python library to cater to different user needs.  
-**Visualization Tools**: Offers a range of visualization options for data interpretation, including heatmaps, similarity networks, and trend analyses.  
-
-
-## Getting Started
-#### Option 1:
-- Web Server: [CAT Bridge Web Server](http://www.catbridge.work)
-#### Option 2:
-- Python packge install
-```
+```bash
 pip install catbridge
 ```
 
-## Bugs or feature requests
-To inform us of any bugs, please open a new issue or send an email to by8@ualberta.ca
+Python 3.9 or newer. `pandas<3` is required (pydeseq2, used for the fold change with replicates, does not yet work with pandas 3). The AI assistant helper `catbridge.llm` needs the optional extra `pip install "catbridge[llm]"`.
 
-## Citation
-Yang, Bowen, Tan Meng, Xinrui Wang, Jun Li, Shuang Zhao, Yingheng Wang, Shu Yi, Yi Zhou, Yi Zhang, Liang Li, and Li Guo. "Cat Bridge: An Efficient Toolkit for Compound-Transcript Association Mining from Multi-Omics Data." bioRxiv  (2024): 2024.01.21.576587. https://dx.doi.org/10.1101/2024.01.21.576587.
+## Quick start
+
+```python
+from catbridge import catbridge as cat
+
+folder = "path/to/demo/pepper/"          # gene.tsv, metabolite.tsv, design.tsv, annotation.tsv
+
+data = cat.compute_corr(
+    folder + "gene.tsv",
+    folder + "metabolite.tsv",
+    folder + "design.tsv",               # None if there are no replicates
+    folder + "annotation.tsv",           # None if there is no annotation
+    target="Capsaicin",                  # a row name of the metabolite table
+    cluster_count=None,                  # number of clusters, or None to skip clustering
+    metrics=["Pearson", "CCM"],          # default: all seven metrics
+)
+print(data.attrs["fc_contrast"])         # the two time points of the fold change: (end, start)
+
+ranked = cat.compute_score(data, "CCM")  # best gene first; the index is the rank
+print(ranked.head(10))
+```
+
+`compute_corr` returns one row per gene. `pipeline(...)` runs `compute_corr` and `compute_score` in one call. Further options: `lag`, `E`, `tau` (see the docstrings), `pseudocount`, `shrink`, `n_cpus`, `random_state`, `verbose=True`.
+
+## Input files
+
+All files are tables whose first column holds the row names. Format by extension: `.csv` (comma), `.tsv`/`.txt` (tab), `.xls`, `.xlsx`; compressed `.gz` also works.
+
+- **gene**: rows = genes (first column, e.g. `Name`), columns = samples (with a design file) or time points (without). **Time order = column order**: the time points are used in the order of the columns, never sorted by name. With a design file, DESeq2 is used for the fold change and needs **raw integer counts** (not TPM/FPKM). Without a design file any non-negative expression values are accepted.
+- **metabolite**: rows = metabolites (first column, e.g. `Name`), same columns as the gene table.
+- **design** (optional, needed for replicates): one row per sample; first column = sample name (the column names of the two tables above), column `group` = time point. Replicates share a group; each compared group needs at least 2 samples for DESeq2.
+- **annotation** (optional): first column = gene name (as in the gene table), column `Description` = free text. Descriptions that contain enzyme words (names ending in `-ase`, `enzyme`, `synthase`) add a small bonus to the score.
+
+## What is computed
+
+**Score.** Metrics between each gene and the target series (Granger causality, CCM, CCA, DTW, CCF, Spearman, Pearson) are computed on the time series (replicates averaged). `compute_score(data, col)` scales the chosen metric (so that a better value is always larger; for Granger p-values and DTW distances this means -log10(p) and -distance), the fold change, and the annotation score to 0-1 and combines them as `Score = sqrt(norm_metric^2 + norm_fc^2 + Description_Score^2)`, rescaled to 0-1. A missing value of a component counts as 0.
+
+**Fold change.** `log2FoldChange` is defined over one interval: the step between two adjacent time points in which the target metabolite rises fastest (largest increase of the group mean; the earliest step wins a tie; steps with missing values are skipped). It is log2(gene at the later time point / gene at the earlier one): with a design file by DESeq2 with apeGLM shrinkage, without one as `log2((x_end + pseudocount) / (x_start + pseudocount))`. The two time points are in `data.attrs["fc_contrast"]`. If the target never rises, a warning is issued and the fold change is NaN for all genes.
+
+## Upgrading from 1.0
+
+Results from 2.0 cannot be reproduced digit for digit with 1.0. Several algorithm errors were fixed and the fold change now uses the steepest-rise interval of the target (1.0: the time point of the highest target value against the next one). The arguments `fc_window` / `fc_offset` (and `window` / `offset` of `find_noontide`, `df_for_fc`, `compute_fc`) were removed. See [CHANGELOG.md](https://github.com/Bowen999/CAT-Bridge/blob/main/CHANGELOG.md) for all changes.
+
+## Contact
+
+Developed and maintained by Bowen Yang (by8@ualberta.ca, by172@georgetown.edu). Please reach out with problems, comments or suggestions.
+
+## License
+
+MIT (see `LICENSE`).
