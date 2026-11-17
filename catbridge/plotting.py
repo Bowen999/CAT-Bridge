@@ -5,14 +5,17 @@ import textwrap
 import pandas as pd
 import numpy as np
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-import seaborn as sns
-import networkx as nx
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-from sklearn.metrics.pairwise import cosine_similarity
+from ._lazy import LazyModule, lazy_callable
+
+# imported on first use (keeps `import catbridge` fast)
+plt = LazyModule('matplotlib.pyplot')
+sns = LazyModule('seaborn')
+nx = LazyModule('networkx')
+Circle = lazy_callable('matplotlib.patches', 'Circle')
+MinMaxScaler = lazy_callable('sklearn.preprocessing', 'MinMaxScaler')
+PCA = lazy_callable('sklearn.decomposition', 'PCA')
+KMeans = lazy_callable('sklearn.cluster', 'KMeans')
+cosine_similarity = lazy_callable('sklearn.metrics.pairwise', 'cosine_similarity')
 
 from .preprocess import merge_dataframes
 from .scoring import METRIC_DIRECTION

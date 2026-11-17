@@ -92,7 +92,8 @@ def test_import_without_heavy_optional_deps():
     """
     code = (
         "import sys\n"
-        "for m in ['openai','datashader','bioinfokit','pydeseq2','tslearn','skfuzzy','adjustText']:\n"
+        "for m in ['openai','datashader','bioinfokit','pydeseq2','tslearn','skfuzzy','adjustText',\n"
+        "          'causal_ccm','fastdtw']:\n"
         "    sys.modules[m] = None\n"
         "import catbridge\n"
         "from catbridge import catbridge as cat\n"

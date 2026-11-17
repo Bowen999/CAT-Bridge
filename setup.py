@@ -21,25 +21,27 @@ setup(
     # Third-party libraries imported by the package (checked against the modules):
     #   data_io     pandas (+ openpyxl for .xlsx, xlrd for .xls)
     #   preprocess  numpy, scipy, scikit-learn, pandas
-    #   metrics     statsmodels, causal-ccm, scikit-learn, fastdtw, scipy;
-    #               scikit-fuzzy (clustering) and tslearn (ts_clustering) are imported lazily
+    #   metrics     numpy, scipy, scikit-learn (kmeans_plusplus in ts_clustering);
+    #               statsmodels (granger_list only); scikit-fuzzy (clustering) imported lazily.
+    #               The metrics are computed in numpy and no longer need causal-ccm (CCM),
+    #               fastdtw (DTW) or tslearn (ts_clustering) (CHANGELOG 1.1.0, "Speed and
+    #               input checks"); the test suite compares against them when installed.
     #   foldchange  pydeseq2 (imported lazily in fc_comp)
     #   scoring     numpy, pandas, scipy, scikit-learn
     #   plotting    matplotlib, seaborn, networkx, scikit-learn; adjustText imported lazily
+    #   (scipy, scikit-learn, matplotlib, seaborn and networkx are imported on first use)
     install_requires=[
-        # pandas 3.0: pydeseq2 0.5.2 raises UFuncTypeError inside DeseqDataSet (tested), so
-        # the fold change with a design file does not work there.
+        # pandas 3.0: pydeseq2 0.5.2 raises a TypeError/UFuncTypeError inside DeseqDataSet
+        # (tested), so the fold change with a design file does not work there; fc_comp then
+        # raises a RuntimeError that says so.
         "pandas>=1.5,<3",
         "numpy",
         "scipy",
-        # scikit-learn >= 1.6: tslearn 0.6.3 (TimeSeriesKMeans, used by ts_clustering) raises
-        # a `force_all_finite` TypeError (tested).
-        "scikit-learn>=1.2,<1.6",
+        # 1.1.0 pinned scikit-learn<1.6 because of tslearn 0.6.3 (force_all_finite TypeError);
+        # tslearn is no longer used.
+        "scikit-learn>=1.2",
         "statsmodels",
-        "causal-ccm",
-        "fastdtw",
         "scikit-fuzzy",
-        "tslearn",
         "pydeseq2",
         "matplotlib",
         "seaborn",

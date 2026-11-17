@@ -1,10 +1,13 @@
 """High-level pipelines tying the other modules together."""
 
+import sys
+import time
 import warnings
 
 import pandas as pd
 
-from .data_io import read_upload, get_target
+from .data_io import (read_upload, get_target, _check_numeric_table, _check_design,
+                      _check_samples_in_design, _check_target)
 from .preprocess import merge_dataframes, repeat_aggregation_mean
 from .metrics import (
     compute_granger,
@@ -63,6 +66,42 @@ def _check_aligned(gene_cols, metabo_cols, what):
     )
 
 
+class _Progress:
+    """Step messages on stderr when ``verbose`` is true."""
+
+    def __init__(self, verbose):
+        self.verbose = bool(verbose)
+        self.t0 = time.perf_counter()
+
+    def __call__(self, msg):
+        if self.verbose:
+            print(f"[catbridge {time.perf_counter() - self.t0:6.1f}s] {msg}", file=sys.stderr,
+                  flush=True)
+
+
+def _merge_annotation(data, annotation):
+    """Left join of the annotation on Name (rows of genes not in ``data`` are ignored).
+
+    If one table has numeric names (e.g. integer gene ids) and the other text, the names are
+    matched by their string form. A warning is issued if no gene has an annotation."""
+    ann = _name_frame(annotation)
+    key = data['Name']
+    if pd.api.types.is_numeric_dtype(key) != pd.api.types.is_numeric_dtype(ann['Name']):
+        str_to_label = dict(zip(key.map(str), key))
+        if len(str_to_label) == len(key):
+            ann = ann.assign(Name=[str_to_label.get(str(v), None) for v in ann['Name']])
+            ann = ann[ann['Name'].notna()]
+            ann = ann.assign(Name=ann['Name'].astype(key.dtype))
+    out = data.merge(ann, on='Name', how='left')
+    if len(annotation) and not key.isin(set(ann['Name'])).any():
+        warnings.warn(
+            f"None of the {len(annotation)} annotation names matches a gene name (e.g. annotation "
+            f"{list(annotation.index[:2])} vs. genes {list(key[:2])}); every gene gets the "
+            "'missing description' score 0.1. The first column of the annotation file must hold "
+            "the gene names of the gene table.", UserWarning, stacklevel=3)
+    return out
+
+
 def _name_frame(obj, value_name=None):
     """Turn a Series / DataFrame indexed by gene name into a table with a 'Name' column."""
     if isinstance(obj, pd.Series):
@@ -99,7 +138,7 @@ def pipeline(gene_file, metabo_file, design_file, annotation_file, target, clust
       'Granger', 'CCM', 'CCA', 'DTW', 'CCF', 'Spearman', 'Pearson' (default 'Granger').
     - **kwargs: any other keyword-only argument of :func:`compute_corr`
       (E, tau, n_components are positional-or-keyword there, so pass them by name here;
-      fc_window, fc_offset, pseudocount, shrink, n_cpus, random_state).
+      fc_window, fc_offset, pseudocount, shrink, n_cpus, random_state, dtw_method, verbose).
 
     Returns:
     - result (pd.DataFrame): the output of ``compute_score(data, score_col)``: columns
@@ -130,7 +169,7 @@ def compute_corr(
     target, cluster_count, aggregation_func=None,
     lag=1, E=3, tau=1, n_components=1,
     *, metrics=None, fc_window='after', fc_offset=1, pseudocount=1.0,
-    shrink=True, n_cpus=None, random_state=0
+    shrink=True, n_cpus=None, random_state=0, dtw_method='fastdtw', verbose=False
 ):
     """
     Computes correlation metrics between gene expression and metabolite data.
@@ -170,6 +209,9 @@ def compute_corr(
       (``no_repeat_fc``).
     - shrink (bool), n_cpus (int or None): passed to ``fc_comp`` (DESeq2) when there is a design file.
     - random_state (int): seed of the time series clustering.
+    - dtw_method ('fastdtw' or 'exact'): 'fastdtw' (default) is the fastdtw approximation used
+      since 1.0; 'exact' is the exact DTW distance, see ``compute_dtw``.
+    - verbose (bool): print each step (with the elapsed time) to stderr. Default False.
 
     Returns:
     - result (pd.DataFrame): one row per gene; columns 'Name', the requested metrics (some with
@@ -180,8 +222,12 @@ def compute_corr(
 
     Raises:
     - ValueError: unknown metric names; ``n_components`` other than 1 (when CCA is computed); the gene and metabolite tables do not have the same
-      samples / time points in the same order; duplicated gene names.
-    - KeyError: the target is not in the metabolite table.
+      samples / time points in the same order; duplicated gene names; empty tables, rows
+      without a name, a missing name column, non-numeric or infinite values; a design table
+      without a 'group' column, with duplicated samples or samples without a group, or whose
+      samples do not match the data columns; a target that is duplicated, constant or has
+      missing time points. Each message names the file / rows / columns concerned.
+    - KeyError: the target is not in the metabolite table (similar names are suggested).
     - Various exceptions may be raised due to file reading, data processing, or computation errors.
 
     Notes:
@@ -203,17 +249,41 @@ def compute_corr(
       and compute an annotation score.
     """
     metrics = _check_metrics(metrics)
+    if dtw_method not in ('fastdtw', 'exact'):
+        raise ValueError(f"dtw_method must be 'fastdtw' or 'exact', got {dtw_method!r}.")
+    say = _Progress(verbose)
 
     # Read data
+    say(f"reading the gene table {gene_file!s}")
     gene = read_upload(gene_file)
+    say(f"reading the metabolite table {metabo_file!s}")
     metabo = read_upload(metabo_file)
+    _check_numeric_table(gene, 'gene', gene_file, 'gene')
+    _check_numeric_table(metabo, 'metabolite', metabo_file, 'metabolite')
+    # sample / time point names are compared as text (an Excel file may give 0, a csv '0')
+    gene.columns = gene.columns.map(str)
+    metabo.columns = metabo.columns.map(str)
+    say(f"{gene.shape[0]} genes x {gene.shape[1]} columns, {metabo.shape[0]} metabolites")
+
+    design = None
+    if design_file is not None:
+        design = _check_design(read_upload(design_file), design_file)
+    # a table without a name column: its first sample became the row names
+    for tbl, other, what in ((gene, metabo, 'gene'), (metabo, gene, 'metabolite')):
+        known = set(design.index) if design is not None else set(other.columns)
+        if tbl.index.name is not None and str(tbl.index.name) in known:
+            raise ValueError(
+                f"The first column of the {what} table is named '{tbl.index.name}', which is a "
+                f"{'sample of the design table' if design is not None else 'time point of the other table'}"
+                f": the table seems to have no name column. Add a first column with the {what} names.")
 
     if gene.index.has_duplicates:
         dup = list(gene.index[gene.index.duplicated()].unique()[:5])
         raise ValueError(f"Gene names must be unique; duplicated names in the gene table: {dup}")
 
-    if design_file is not None:
-        design = read_upload(design_file)
+    if design is not None:
+        for tbl, what in ((gene, 'gene'), (metabo, 'metabolite')):
+            _check_samples_in_design(list(tbl.columns), design, what)
         if aggregation_func is None:
             aggregation_func = repeat_aggregation_mean
         # Process data
@@ -221,9 +291,12 @@ def compute_corr(
         processed_metabo = aggregation_func(metabo, design)
         _check_aligned(processed_gene.columns, processed_metabo.columns, 'time points (groups)')
         t = get_target(target, processed_metabo)
+        _check_target(t, target, processed_metabo.columns)
         # Fold change: DESeq2 on the raw counts of the peak / comparison groups
         counts, design_sub = df_for_fc(processed_metabo, target, gene, design,
                                        window=fc_window, offset=fc_offset)
+        say(f"fold change: DESeq2 on {counts.shape[0]} genes x {counts.shape[1]} samples "
+            f"(groups {design_sub.attrs.get('contrast')}); this is the slowest step")
         fc = fc_comp(counts, design_sub, contrast=design_sub.attrs.get('contrast'),
                      shrink=shrink, n_cpus=n_cpus)
     else:
@@ -231,43 +304,63 @@ def compute_corr(
         processed_gene = gene
         processed_metabo = metabo
         t = get_target(target, metabo)
+        _check_target(t, target, metabo.columns)
         noontide = find_noontide(metabo, target, window=fc_window, offset=fc_offset)
         fc = no_repeat_fc(gene, noontide, pseudocount=pseudocount)
 
+    n_time = processed_gene.shape[1]
+    if n_time <= 3:
+        warnings.warn(
+            f"Only {n_time} time points: Granger and CCM cannot be computed and the correlation-type "
+            "metrics are not informative with so few points (with 2 points every Pearson r is +1 "
+            "or -1).", UserWarning, stacklevel=2)
+
     # Compute corr
     tables = []
-    if 'Granger' in metrics:
-        tables.append(compute_granger(processed_gene, t, maxlag=lag))
-    if 'CCM' in metrics:
-        tables.append(compute_ccm(processed_gene, t, E=E, tau=tau))
-    if 'CCA' in metrics:
-        tables.append(compute_cca(processed_gene, t, n_components=n_components))
-    if 'DTW' in metrics:
-        tables.append(compute_dtw(processed_gene, t))
-    if 'CCF' in metrics:
-        tables.append(compute_ccf(processed_gene, t, lag=lag))
-    if 'Spearman' in metrics:
-        tables.append(compute_spearman(processed_gene, t))
-    if 'Pearson' in metrics:
-        tables.append(compute_pearson(processed_gene, t))
+    steps = [
+        ('Granger', lambda: compute_granger(processed_gene, t, maxlag=lag)),
+        ('CCM', lambda: compute_ccm(processed_gene, t, E=E, tau=tau)),
+        ('CCA', lambda: compute_cca(processed_gene, t, n_components=n_components)),
+        ('DTW', lambda: compute_dtw(processed_gene, t, method=dtw_method)),
+        ('CCF', lambda: compute_ccf(processed_gene, t, lag=lag)),
+        ('Spearman', lambda: compute_spearman(processed_gene, t)),
+        ('Pearson', lambda: compute_pearson(processed_gene, t)),
+    ]
+    for name, step in steps:
+        if name in metrics:
+            say(f"{name}")
+            tables.append(step())
     tables.append(_name_frame(fc))
 
     # Clustering on the aggregated time series
     if cluster_count:
+        say(f"time series clustering ({cluster_count} clusters)")
         clustering_result = ts_clustering(processed_gene, cluster_count, random_state=random_state)
         tables.append(_name_frame(clustering_result, 'Cluster'))
 
     data = merge_dataframes(tables)
 
     if annotation_file is not None:
+        say(f"annotation {annotation_file!s}")
         annotation = read_upload(annotation_file)
+        if 'Description' not in annotation.columns:
+            alt = [c for c in annotation.columns if str(c).strip().lower() == 'description']
+            if len(alt) != 1:
+                raise ValueError(
+                    f"The annotation table ('{annotation_file}') needs a column named 'Description' "
+                    f"(the gene description used for the annotation score); its columns are "
+                    f"{list(annotation.columns)[:10]}. The first column must hold the gene names.")
+            warnings.warn(f"annotation table: using column {alt[0]!r} as 'Description'.",
+                          UserWarning, stacklevel=2)
+            annotation = annotation.rename(columns={alt[0]: 'Description'})
         if annotation.index.has_duplicates:
             warnings.warn("The annotation table has duplicated names; only the first row of each "
                           "name is used.", UserWarning, stacklevel=2)
             annotation = annotation[~annotation.index.duplicated(keep='first')]
         # left join: annotation rows of genes that are not in the gene table must not
         # become extra (all-NaN) rows of the result
-        data = data.merge(_name_frame(annotation), on='Name', how='left')
+        data = _merge_annotation(data, annotation)
         data = add_annotation_score(data)  # Add a new column for annotation score
 
+    say("done")
     return data

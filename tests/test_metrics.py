@@ -49,16 +49,6 @@ def _messy_frame():
     return df, target
 
 
-def _tslearn_usable():
-    try:
-        pytest.importorskip("tslearn")
-        df, _ = _small_frame(6, 8)
-        ts_clustering(df, 2)
-    except pytest.skip.Exception:
-        raise
-    except Exception as e:  # tslearn present but incompatible with this sklearn/numpy
-        pytest.skip(f"tslearn not usable in this environment: {type(e).__name__}: {e}")
-
 
 # ---------------------------------------------------------------- CCF direction
 def test_ccf_gene_leads_target():
@@ -245,7 +235,6 @@ def test_compute_does_not_modify_inputs(func):
 
 
 def test_ts_clustering_does_not_modify_input():
-    _tslearn_usable()
     df, _ = _small_frame(10, 8)
     df_copy = df.copy(deep=True)
     out = ts_clustering(df, 3)
@@ -257,7 +246,6 @@ def test_ts_clustering_does_not_modify_input():
 
 
 def test_ts_clustering_reproducible_and_kwargs():
-    _tslearn_usable()
     df, _ = _small_frame(20, 8, seed=5)
     a = ts_clustering(df, 3)
     b = ts_clustering(df, 3, random_state=0, max_iter=5)
@@ -268,7 +256,6 @@ def test_ts_clustering_reproducible_and_kwargs():
 
 def test_ts_clustering_output_merges_on_name():
     """downstream merge_dataframes does ``left.merge(series, on='Name', how='outer')``"""
-    _tslearn_usable()
     df, target = _small_frame(10, 8)
     df.index.name = "Name"
     merged = compute_pearson(df, target).merge(ts_clustering(df, 2), on="Name", how="outer")

@@ -1,7 +1,7 @@
 """Tests for catbridge.pipeline (compute_corr / pipeline) on a small synthetic data set.
 
-Tests that need a working tslearn (clustering) or pydeseq2 (DESeq2 fold change) skip
-themselves when the third-party package is missing or does not run in this environment.
+Tests that need a working pydeseq2 (DESeq2 fold change) skip themselves when it is missing
+or does not run in this environment (the clustering no longer needs tslearn).
 """
 import inspect
 
@@ -135,19 +135,6 @@ def deseq_ok():
         pytest.skip(f"pydeseq2 does not run in this environment: {type(e).__name__}: {e}")
 
 
-@pytest.fixture(scope='module')
-def tslearn_ok():
-    try:
-        pytest.importorskip('tslearn')
-        from catbridge.metrics import ts_clustering
-        rng = np.random.default_rng(0)
-        ts_clustering(pd.DataFrame(rng.normal(size=(6, 8))), 2)
-    except pytest.skip.Exception:
-        raise
-    except Exception as e:
-        pytest.skip(f"tslearn not usable in this environment: {type(e).__name__}: {e}")
-
-
 def _args(d, design=True, annotation=True):
     """Positional arguments of the first four parameters."""
     if design:
@@ -170,7 +157,8 @@ def test_compute_corr_signature():
     kwonly = {p.name: p.default for p in params[11:]}
     assert all(p.kind is p.KEYWORD_ONLY for p in params[11:])
     assert kwonly == dict(metrics=None, fc_window='after', fc_offset=1, pseudocount=1.0,
-                          shrink=True, n_cpus=None, random_state=0)
+                          shrink=True, n_cpus=None, random_state=0,
+                          dtw_method='fastdtw', verbose=False)   # last two: speed/input-check update
 
 
 def test_pipeline_signature():
@@ -607,7 +595,7 @@ def test_design_path_with_integer_gene_names(data, tmp_path, deseq_ok):
     assert out['Pearson'].notna().all()           # not shifted into separate (all-NaN) rows
 
 
-def test_pipeline_with_clustering(data, tslearn_ok):
+def test_pipeline_with_clustering(data):
     res = pipeline(data['gene_mean'], data['metabolite_mean'], None, data['annotation'],
                    TARGET, 3)
     assert 'Cluster' in res.columns and res['Cluster'].between(0, 2).all()

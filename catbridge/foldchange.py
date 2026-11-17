@@ -6,7 +6,7 @@ import warnings
 import pandas as pd
 import numpy as np
 
-from .data_io import read_upload
+from .data_io import read_upload, _check_numeric_table, _check_design, _check_samples_in_design
 from .preprocess import repeat_aggregation_mean
 
 __all__ = [
@@ -158,8 +158,10 @@ def no_repeat_fc(df, noontide, pseudocount=1.0):
     peak = pd.to_numeric(df[noontide[0]], errors='coerce').astype(float)
     other = pd.to_numeric(df[noontide[1]], errors='coerce').astype(float)
     if (peak < 0).any() or (other < 0).any():
-        raise ValueError("Negative values found in the columns used for fold change; "
-                         "expression values must be >= 0.")
+        neg = list(df.index[((peak < 0) | (other < 0)).to_numpy()][:5])
+        raise ValueError("Negative values found in the columns used for fold change "
+                         f"({list(noontide)}), e.g. genes {neg}; expression values must be >= 0 "
+                         "(the fold change expects expression that is not log-transformed).")
 
     lfc = np.log2((peak + pseudocount) / (other + pseudocount))
 
@@ -272,6 +274,43 @@ def _restore_gene_labels(result_index, original_index):
     return pd.Index([str_to_label[str(i)] for i in result_index])
 
 
+def _import_pydeseq2():
+    try:
+        from pydeseq2.dds import DeseqDataSet  # lazy import (heavy optional dependency)
+        from pydeseq2.ds import DeseqStats
+    except ImportError as e:
+        raise ImportError(
+            "The fold change with a design file (replicates) is computed with DESeq2 (pydeseq2), "
+            f"which could not be imported ({type(e).__name__}: {e}). Install it with "
+            "`pip install pydeseq2`.") from e
+    return DeseqDataSet, DeseqStats
+
+
+def _raise_if_incompatible(error):
+    """pydeseq2 0.5.x fails inside DeseqDataSet with pandas >= 3 (a TypeError / UFuncTypeError
+    raised by pandas). Turn that into an error that says so; other errors are left alone."""
+    try:
+        pandas_major = int(pd.__version__.split('.')[0])
+    except ValueError:
+        return
+    if pandas_major < 3:
+        return
+    try:
+        from importlib.metadata import version
+        pydeseq2_version = version('pydeseq2')
+    except Exception:
+        pydeseq2_version = 'unknown'
+    if not (pydeseq2_version.startswith(('0.4', '0.5')) or pydeseq2_version == 'unknown'):
+        return
+    raise RuntimeError(
+        f"DESeq2 (pydeseq2 {pydeseq2_version}) failed with pandas {pd.__version__}: "
+        f"{type(error).__name__}: {str(error)[:200]}. pydeseq2 0.4/0.5 is known not to work with "
+        "pandas 3 "
+        "(catbridge requires pandas<3 for this reason). Fix: install pandas<3 in this environment "
+        "(`pip install \"pandas<3\"`), or a pydeseq2 release that supports pandas 3. The fold "
+        "change was NOT computed; no other method was substituted.") from error
+
+
 def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     """
     Perform a DESeq2 (pydeseq2) analysis given raw counts and sample metadata.
@@ -302,8 +341,7 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     compared with the raw group-mean ratio normalised with DESeq2's own size factors; a
     disagreement (< 50% of clear-cut genes) only issues a warning, it never raises.
     """
-    from pydeseq2.dds import DeseqDataSet  # lazy import (heavy optional dependency)
-    from pydeseq2.ds import DeseqStats
+    DeseqDataSet, DeseqStats = _import_pydeseq2()
 
     peak, ref = _resolve_contrast(contrast, metadata, sample_order=list(counts_df.columns))
 
@@ -324,7 +362,11 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     counts = counts_df[samples]
     values = counts.to_numpy(dtype=float)
     if np.isnan(values).any():
-        raise ValueError("counts_df contains NaN; DESeq2 needs complete raw counts.")
+        rows = np.isnan(values).any(axis=1)
+        raise ValueError(
+            f"counts_df contains NaN: {int(rows.sum())} gene(s) have missing counts in the compared "
+            f"samples {samples} (e.g. {list(counts.index[rows][:5])}). DESeq2 needs complete raw "
+            "counts: remove these genes or fill in their counts (0 only if they are true zeros).")
     if (values < 0).any():
         raise ValueError("counts_df contains negative values; DESeq2 needs raw counts.")
     if np.any(np.abs(values - np.round(values)) > 1e-3):
@@ -359,16 +401,19 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     else:  # pydeseq2 0.4.x
         dds_kwargs['design_factors'] = 'condition'
         dds_kwargs['ref_level'] = ['condition', ref_s]
-    dds = DeseqDataSet(**dds_kwargs)
-    dds.deseq2()
-
     stats_kwargs = dict(contrast=['condition', peak_s, ref_s])
     if _accepts(DeseqStats.__init__, 'n_cpus'):
         stats_kwargs['n_cpus'] = n_cpus
     if _accepts(DeseqStats.__init__, 'quiet'):
         stats_kwargs['quiet'] = True
-    stat_res = DeseqStats(dds, **stats_kwargs)
-    stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
+    try:
+        dds = DeseqDataSet(**dds_kwargs)
+        dds.deseq2()
+        stat_res = DeseqStats(dds, **stats_kwargs)
+        stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
+    except Exception as e:
+        _raise_if_incompatible(e)
+        raise
 
     # Direction self-check (insurance only: the direction is fixed by the explicit contrast).
     # Uses DESeq2's own size factors; never raises, only warns. Skipped if they are unavailable.
@@ -432,9 +477,15 @@ def compute_fc(
     # Read data
     gene = read_upload(gene_file)
     metabo = read_upload(metabo_file)
-    
+    _check_numeric_table(gene, 'gene', gene_file, 'gene')
+    _check_numeric_table(metabo, 'metabolite', metabo_file, 'metabolite')
+    gene.columns = gene.columns.map(str)
+    metabo.columns = metabo.columns.map(str)
+
     if design_file is not None:
-        design = read_upload(design_file)
+        design = _check_design(read_upload(design_file), design_file)
+        _check_samples_in_design(list(gene.columns), design, 'gene')
+        _check_samples_in_design(list(metabo.columns), design, 'metabolite')
         if aggregation_func is None:
             aggregation_func = repeat_aggregation_mean
         processed_metabo = aggregation_func(metabo, design)

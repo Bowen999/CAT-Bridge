@@ -5,10 +5,13 @@ import warnings
 import pandas as pd
 import numpy as np
 
-from scipy.stats import linregress  # linear regression
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import IncrementalPCA
+from ._lazy import lazy_callable
+
+# imported on first use (keeps `import catbridge` fast)
+linregress = lazy_callable('scipy.stats', 'linregress')  # linear regression
+MinMaxScaler = lazy_callable('sklearn.preprocessing', 'MinMaxScaler')
+StandardScaler = lazy_callable('sklearn.preprocessing', 'StandardScaler')
+IncrementalPCA = lazy_callable('sklearn.decomposition', 'IncrementalPCA')
 
 __all__ = [
     'normalize',

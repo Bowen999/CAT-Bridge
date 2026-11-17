@@ -5,8 +5,11 @@ import re
 import pandas as pd
 import numpy as np
 
-from scipy.stats import linregress  # linear regression
-from sklearn.decomposition import PCA
+from ._lazy import lazy_callable
+
+# imported on first use (keeps `import catbridge` fast)
+linregress = lazy_callable('scipy.stats', 'linregress')  # linear regression
+PCA = lazy_callable('sklearn.decomposition', 'PCA')
 
 __all__ = [
     'score',
