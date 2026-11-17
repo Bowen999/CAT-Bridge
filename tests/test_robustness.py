@@ -373,7 +373,7 @@ def test_annotation_integer_ids_match_text_ids(tmp_path):
     ann = pd.DataFrame({'Description': ['kinase'] * 8}, index=[f'{i}' for i in range(100, 108)])
     gp = _write(tmp_path, 'g', gm)
     mp = _write(tmp_path, 'm', mm)
-    # integer gene ids in the gene table, the same ids as text in the annotation (1.1.0: no
+    # integer gene ids in the gene table, the same ids as text in the annotation (earlier development version: no
     # match at all -> every gene silently got the 'missing description' score)
     ann_text = ann.copy()
     ann_text.index = ann_text.index.astype(object)
@@ -411,7 +411,7 @@ def test_gene_with_missing_value_is_not_clustered(files, tmp_path):
     res = res.set_index('Name')
     assert np.isnan(res.loc['G03', 'Cluster'])
     assert res.drop('G03')['Cluster'].notna().all()
-    assert res.drop('G03')['Cluster'].nunique() == 3     # (1.1.0: NaN rows broke the clustering)
+    assert res.drop('G03')['Cluster'].nunique() == 3     # (earlier development version: NaN rows broke the clustering)
 
 
 def test_clustering_without_tslearn_causal_ccm_fastdtw(files):

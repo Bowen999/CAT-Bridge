@@ -103,3 +103,19 @@ def test_import_without_heavy_optional_deps():
     r = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "ok" in r.stdout
+
+
+def test_version_is_consistent():
+    """catbridge.__version__, setup.py and the catbridge.py header name the same version."""
+    import re
+    import catbridge
+    assert catbridge.__version__ == "2.0.0"
+    with open(os.path.join(REPO, "setup.py"), encoding="utf-8") as f:
+        assert re.search(r'version="([^"]+)"', f.read()).group(1) == catbridge.__version__
+    with open(os.path.join(REPO, "catbridge", "catbridge.py"), encoding="utf-8") as f:
+        assert re.search(r"^Version: (\S+)", f.read(), re.M).group(1) == catbridge.__version__
+
+
+def test_find_noontide_name_kept_and_new_name_exported():
+    from catbridge import catbridge as cat
+    assert callable(cat.find_noontide) and callable(cat.find_steepest_rise)

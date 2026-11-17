@@ -1,14 +1,26 @@
 # Changelog
 
-## 1.1.0
+## 2.0.0
+
+### Changed: fold change (breaking)
+
+The fold change (`log2FoldChange`) now has one definition: the **steepest rise of the target metabolite**. In the target's time series (the group means when there is a design file; columns in data-file order) the pair of adjacent time points `i -> i+1` with the largest increase `x[i+1] - x[i]` is chosen (ties: the earliest step; pairs with a missing value are skipped). `log2FoldChange = log2(gene at i+1 / gene at i)`: DESeq2 with contrast `(i+1 group, i group)` and LFC shrinkage when there is a design file, `log2((x[i+1] + pseudocount) / (x[i] + pseudocount))` otherwise. 1.0 compared the time point of the highest target value with the one after it; results are not comparable.
+
+- If the target never rises (no adjacent pair without NaN, or no positive step) a `UserWarning` is issued and `log2FoldChange` is NaN for all genes (it counts as 0 in the score); DESeq2 is not run.
+- The two time points are reported: `compute_corr(...).attrs['fc_contrast'] == (end, start)` (also on the result of `pipeline()` and `compute_fc`; `None` if there is no rise), and printed with `verbose=True`. With a design file `attrs['lfc_shrunk']` is True if the shrinkage was applied and False if it was switched off or failed (unshrunk values returned, with a warning).
+- Removed: the peak logic and its parameters `window` / `offset` (`find_noontide`, `df_for_fc`, `compute_fc`) and `fc_window` / `fc_offset` (`compute_corr`, `pipeline`); passing them raises `TypeError`.
+- `find_steepest_rise(df, row_name)` is the new function. `find_noontide(df, row_name)` is kept as an alias; it now returns `pd.Index([end_column, start_column])` of the steepest rise (1.0: `[peak, next column]`), or `None` with a warning if there is no rise.
+- `fc_comp(..., contrast=(end_group, start_group))`; `catbridge/FC.R` (an unused R script) is no longer shipped.
+- `catbridge.__version__` was added.
+
+(1.1.0 was never released; its changes are part of 2.0.0 and listed below.)
 
 ### Fixed
 
 - CCF direction was reversed and negative lags were wrong -> `compute_ccf` is now `corr(gene[t], target[t+lag])`: `lag > 0` means the gene leads the metabolite, `lag < 0` the reverse.
-- Fold change without replicates gave -52 for zero/negative ratios and turned inf into 0 -> `no_repeat_fc` uses `log2((peak + pseudocount) / (comparison + pseudocount))`; zero vs zero gives 0.
-- DESeq2 fold change direction depended on the alphabetical order of the group names -> `fc_comp` uses an explicit contrast, `log2(peak group / comparison group)`.
+- Fold change without replicates gave -52 for zero/negative ratios and turned inf into 0 -> `no_repeat_fc` uses `log2((end + pseudocount) / (start + pseudocount))`; zero vs zero gives 0.
+- DESeq2 fold change direction depended on the alphabetical order of the group names -> `fc_comp` uses an explicit contrast, `log2(end group / start group)`.
 - `repeat_aggregation_mean` re-sorted the time points alphabetically -> columns keep the order in which the groups first appear in the data columns (the time order is that of the data file, not of the design file's rows; `repeat_aggregation_max` and the no-design path behave the same way).
-- Peak in the last column: 1.0 silently switched to the second-highest column -> `find_noontide` now compares with the column on the other side of the same peak and warns (error if neither side exists).
 - `compute_score` modified the input DataFrame in place (it overwrote `Granger` with 1-p) and scored DTW as "larger is better" -> input is never modified; DTW distance is "smaller is better"; `Cluster` is optional.
 - Annotation score treated words such as disease, release, base, phase as enzymes and missed words followed by punctuation (`ligase,`) -> words are split on punctuation and a built-in exclusion list (`ASE_EXCLUDE`) is applied to the generic `ase` suffix; the input is not modified.
 - `top_important_features` ignored how much variance each principal component explains -> loadings are weighted by explained variance ratio; errors are raised instead of printed and returning `None`.
@@ -32,15 +44,15 @@
 - Annotation is merged with a left join on `Name`: annotation rows for genes not in the gene table no longer create extra rows (duplicated annotation names keep the first row, with a warning).
 - `add_annotation_score`: matching is case-insensitive; a plural such as `kinases` also matches after removing the trailing `s`; words that match only the generic `ase` suffix need at least 5 letters (and must not be in `ASE_EXCLUDE`); an empty or blank description counts as missing and scores 0.1 (1.0: 0, only NaN gave 0.1).
 - `no_repeat_fc`: negative input values raise `ValueError`; `NaN` in either column stays `NaN` (1.0 filled it with 0).
-- `fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None)`: new `contrast` argument `(peak_group, comparison_group)`; without it `metadata.attrs['contrast']` (set by `df_for_fc`) is used.
+- `fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None)`: new `contrast` argument `(end_group, start_group)`; without it `metadata.attrs['contrast']` (set by `df_for_fc`) is used.
 - `pipeline()` returns only the columns of `compute_score` (`Name`, the score column, `log2FoldChange`, optional `Cluster`, `Score`, optional `<col>_padj`); 1.0 returned the whole merged table (including `Description`, `Description_Score` and, with a design file, the Pearson column). Use `compute_corr` for the full table.
 - Column alignment check in `compute_corr`: with a design file the aggregated tables are compared by their time points (group names); without a design file the original columns of the gene and metabolite tables are compared (names and order).
 - A missing metric or fold change contributes 0 to the score (1.0: NaN score).
 - `compute_ccm` returns NaN for all genes and a `UserWarning` when the series is too short (`N - (E-1)*tau < E + 2`) instead of raising.
 - `compute_corr` raises `ValueError` if the gene and metabolite tables do not have the same columns in the same order, and for duplicated gene names.
-- New parameters: `find_noontide` / `df_for_fc` `window` (`'after'`/`'before'`, default `'after'`) and `offset` (default 1); `compute_corr` `fc_window`, `fc_offset`, `pseudocount` (default 1.0), `shrink`, `n_cpus`, and `compute_fc` `window`, `offset`, `pseudocount`, `shrink`, `n_cpus`; `compute_corr` `metrics` (subset of Granger, CCM, CCA, DTW, CCF, Spearman, Pearson; default all) and `random_state` (default 0); `ts_clustering` `random_state`, `max_iter`; `pipeline` `score_col` (default `'Granger'`) and extra keyword arguments passed to `compute_corr`. `pipeline()` returns the table indexed by `Rank`.
+- New parameters: `compute_corr` and `compute_fc` `pseudocount` (default 1.0), `shrink`, `n_cpus`; `compute_corr` `metrics` (subset of Granger, CCM, CCA, DTW, CCF, Spearman, Pearson; default all) and `random_state` (default 0); `ts_clustering` `random_state`, `max_iter`; `pipeline` `score_col` (default `'Granger'`) and extra keyword arguments passed to `compute_corr`. `pipeline()` returns the table indexed by `Rank`.
 - `plot_result` colours a Granger column by `-log10(p)` and a DTW column by `-DTW` (colour bar label says so), i.e. a darker colour is always stronger evidence (`scoring.METRIC_DIRECTION`).
-- `setup.py`: version 1.1.0, `python_requires>=3.9`, `install_requires` now listed. Upper bounds: `pandas<3` (pydeseq2 0.5.2 fails on pandas 3.0, so the design-file fold change does not work there) and `scikit-learn<1.6` (tslearn 0.6.3 fails with a `force_all_finite` error). `openai<1.0` is an optional extra (`catbridge[llm]`), because `catbridge.llm` uses the pre-1.0 OpenAI interface.
+- `setup.py`: version 2.0.0, `python_requires>=3.9`, `install_requires` now listed, upper bound `pandas<3` (pydeseq2 0.5.2 fails on pandas 3.0, so the design-file fold change does not work there). `openai<1.0` is an optional extra (`catbridge[llm]`), because `catbridge.llm` uses the pre-1.0 OpenAI interface.
 
 #### Behaviour changes after review (second round)
 
@@ -58,8 +70,8 @@ Same methods, same scores; `compute_corr` is much faster and rejects or repairs 
 
 - Speed: all metrics and the clustering are computed for the whole gene x time matrix at once (numpy) instead of gene by gene. Pepper demo (34,974 genes, design file, 10 cores): `compute_corr` 64 s -> 16 s, of which about 15 s are DESeq2 (pydeseq2, unchanged; it already uses all CPU cores by default, a smaller `n_cpus` is slower). Human demo (10,339 genes x 47 time points, no design): 42 s -> 1.2 s. `import catbridge` 3.4 s -> 0.9 s (matplotlib, seaborn, networkx, scikit-learn, scipy.stats are imported on first use).
 - Same numbers: on both demo data sets every column of `compute_corr` is identical to before (NaN in the same places) except CCA and CCF, which differ by at most 6e-16 (CCA is now computed as |Pearson r|, which it is mathematically for one gene vs. one metabolite; CCF is summed directly instead of by FFT, and the FFT result itself varies at this level from run to run). Because of these last-digit differences, genes whose CCA / CCF values are mathematically equal can swap places in `compute_score(data, 'CCA')` / `('CCF')`; no other ranking changes.
-- Dependencies: `causal-ccm`, `fastdtw` and `tslearn` are no longer needed (CCM, DTW and the clustering are reproduced exactly; the tests compare against these packages when they are installed). The `scikit-learn<1.6` limit is removed (it was only there for tslearn), so the clustering now also works with scikit-learn >= 1.6.
-- DTW: `compute_dtw(..., method='fastdtw')` (default) gives the fastdtw values of 1.1.0. `method='exact'` (also `compute_corr(..., dtw_method='exact')`) gives the exact DTW distance that fastdtw approximates. It is not the default because it changes results on long series: on the pepper demo (7 time points) the two agree for 99.9% of genes and the top 100 by `compute_score(data, 'DTW')` are the same; on the human demo (47 time points) the fastdtw value is larger for 96% of genes (median +11%, max +41%), the gene-wise rank correlation is 0.93, and 82 of the top 100 by `compute_score(data, 'DTW')` are the same.
+- Dependencies: `causal-ccm`, `fastdtw` and `tslearn` are no longer needed (CCM, DTW and the clustering are reproduced exactly; the tests compare against these packages when they are installed). Without tslearn no scikit-learn upper bound is needed: the clustering works with scikit-learn >= 1.6 (tslearn 0.6.3 fails there).
+- DTW: `compute_dtw(..., method='fastdtw')` (default) gives the values of the fastdtw package. `method='exact'` (also `compute_corr(..., dtw_method='exact')`) gives the exact DTW distance that fastdtw approximates. It is not the default because it changes results on long series: on the pepper demo (7 time points) the two agree for 99.9% of genes and the top 100 by `compute_score(data, 'DTW')` are the same; on the human demo (47 time points) the fastdtw value is larger for 96% of genes (median +11%, max +41%), the gene-wise rank correlation is 0.93, and 82 of the top 100 by `compute_score(data, 'DTW')` are the same.
 - `compute_corr(..., verbose=True)` prints each step with the elapsed time to stderr.
 - Input checks in `read_upload` / `compute_corr` / `compute_fc` (each message names the file, rows or columns concerned):
   - repaired with a warning: comment/trailer rows such as `## 32703 queries scanned` (eggNOG-mapper output) and rows without a name or data; a delimiter that does not match the extension (tab-separated `.csv`, comma- or semicolon-separated `.tsv`); spaces around sample and gene names; empty columns from trailing delimiters; a design column `Group` / annotation column `description` (other capitalisation); integer gene ids in one table and the same ids as text in the other (annotation merge); integer column names from Excel vs. text from csv. `read_upload` also accepts path objects, upper-case extensions and compressed files (`.tsv.gz`).
@@ -74,4 +86,4 @@ The single `catbridge.py` is split into `data_io`, `preprocess`, `metrics`, `fol
 
 ### Reproducing 1.0 results
 
-Rankings from 1.0 cannot be reproduced digit for digit with 1.1.0 because of the fixes above. To reproduce old results, use version 1.0 (git commit `deebb82`).
+Rankings from 1.0 cannot be reproduced digit for digit with 2.0.0 because of the fixes and the new fold change above. To reproduce old results, use version 1.0 (git commit `deebb82`).

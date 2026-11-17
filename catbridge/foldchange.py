@@ -1,4 +1,4 @@
-"""Fold-change computation: noontide detection, no-replicate FC, DESeq2-based FC."""
+"""Fold-change computation: steepest rise of the target, no-replicate FC, DESeq2-based FC."""
 
 import inspect
 import warnings
@@ -10,6 +10,7 @@ from .data_io import read_upload, _check_numeric_table, _check_design, _check_sa
 from .preprocess import repeat_aggregation_mean
 
 __all__ = [
+    'find_steepest_rise',
     'find_noontide',
     'df_for_fc',
     'no_repeat_fc',
@@ -18,84 +19,82 @@ __all__ = [
 ]
 
 
-# ********* Noontide ************
-def find_noontide(df, row_name, window='after', offset=1):
+# ********* Steepest rise ************
+def find_steepest_rise(df, row_name):
     """
-    Find the peak ("noontide") column of a row and the column it is compared with.
+    Find the interval in which a row (the target metabolite) rises fastest.
 
-    The peak column is the column with the highest value in ``df.loc[row_name]``.
-    The comparison column lies ``offset`` columns after (``window='after'``, default, the
-    behaviour of CAT Bridge 1.0) or before (``window='before'``) the peak column.
-    The peak column is always returned first.
-
-    If the comparison column would fall outside the table (e.g. ``window='after'`` and the peak
-    is in the last column) the other side is used (same ``offset``) and a warning is issued;
-    if neither side has such a column a ValueError is raised.  (The old "use the second
-    highest column instead" fallback was removed: it compared time points unrelated to the peak.)
-
-    Reproducing the column choice of the case-study version of ``find_noontide`` (the one that
-    returns the peak and the column two positions before it, "-3 position" in its docstring):
-    use ``window='before', offset=2``.  That version additionally falls back to the 2nd/3rd
-    highest column when the peak is in the first two columns; that fallback cannot be
-    expressed here (we fall back to the other side of the *same* peak instead).
+    ``df.loc[row_name]`` is the time series of the target (columns in time order; with a
+    design file the replicate-aggregated group means). Among all pairs of adjacent columns
+    ``i -> i+1`` the one with the largest increase ``x[i+1] - x[i]`` is chosen. Ties go to
+    the earliest step. Pairs where either value is NaN are skipped. This is the one and only
+    definition of the fold change in CAT Bridge 2.0: the fold change of a gene is
+    log2(expression at the end column / expression at the start column) of this step.
 
     Parameters:
-        df (pandas DataFrame): The DataFrame has been aggregated (columns in time order).
-        row_name (str): The name of the row to be detected.
-        window (str): 'after' or 'before'.
-        offset (int): Distance (in columns) between the peak column and the comparison column, >= 1.
+        df (pandas DataFrame): rows = metabolites, columns = time points in time order.
+        row_name (str): The name of the target row.
 
     Returns:
-        pandas.Index: ``[peak_column, comparison_column]``.
+        pandas.Index: ``[end_column, start_column]`` (the column at ``i+1`` first, then the
+        column at ``i``), i.e. ``[numerator, reference]`` of the fold change. ``None`` (with a
+        ``UserWarning``) if there is no rising step: no adjacent pair without NaN, or the
+        series never increases.
 
     Raises:
         KeyError: ``row_name`` is not in ``df.index``.
-        ValueError: bad ``window``/``offset``, the row has no numeric value, or no comparison
-            column exists on either side.
+        ValueError: the row name is not unique or ``df`` has fewer than two columns.
     """
-    if window not in ('after', 'before'):
-        raise ValueError(f"window must be 'after' or 'before', got {window!r}.")
-    if isinstance(offset, bool) or not isinstance(offset, (int, np.integer)) or offset < 1:
-        raise ValueError(f"offset must be an integer >= 1, got {offset!r}.")
-
     if row_name not in df.index:
         raise KeyError(f"Row '{row_name}' is not in the index of the dataframe.")
     row = df.loc[row_name]
     if isinstance(row, pd.DataFrame):
         raise ValueError(f"Row name '{row_name}' is not unique in the index.")
+    if len(row) < 2:
+        raise ValueError(f"The row '{row_name}' needs at least two columns (time points) to "
+                         "find a rising step.")
 
     # Convert to numeric and handle errors by replacing non-numeric values with NaN
     values = pd.to_numeric(row, errors='coerce').to_numpy(dtype=float)
-    if np.isnan(values).all():
-        raise ValueError(f"The row '{row_name}' contains only non-numeric or missing values.")
+    steps = np.diff(values)                      # NaN where either neighbour is NaN
+    valid = np.isfinite(steps)
+    if not valid.any():
+        reason = "there is no pair of adjacent time points without missing values"
+    elif not (steps[valid] > 0).any():
+        reason = "its values never increase from one time point to the next"
+    else:
+        i = int(np.argmax(np.where(valid, steps, -np.inf)))   # first maximum = earliest step
+        return df.columns[[i + 1, i]]
+    warnings.warn(
+        f"No rising step found for '{row_name}': {reason}. The fold change is defined as the "
+        "change over the interval in which the target rises fastest, so log2FoldChange is set "
+        "to NaN for all genes (it counts as 0 in the score).",
+        UserWarning, stacklevel=2)
+    return None
 
-    n = len(values)
-    peak = int(np.nanargmax(values))
-    step = offset if window == 'after' else -offset
 
-    other = peak + step
-    if not 0 <= other < n:
-        alt = peak - step
-        side = 'after' if step > 0 else 'before'
-        alt_side = 'before' if step > 0 else 'after'
-        if not 0 <= alt < n:
-            raise ValueError(
-                f"The peak of '{row_name}' is in column '{df.columns[peak]}' (position {peak} of {n}); "
-                f"there is no column {offset} position(s) after or before it."
-            )
-        warnings.warn(
-            f"The peak of '{row_name}' is in column '{df.columns[peak]}' (position {peak} of {n}), "
-            f"so there is no column {offset} position(s) {side} it; using the column {offset} "
-            f"position(s) {alt_side} it instead ('{df.columns[alt]}').",
-            UserWarning, stacklevel=2,
-        )
-        other = alt
+def find_noontide(df, row_name):
+    """
+    Deprecated name of :func:`find_steepest_rise` (kept so that old imports work).
 
-    return df.columns[[peak, other]]
+    The meaning changed in CAT Bridge 2.0: 1.x returned ``[peak_column, neighbour_column]``
+    (the column with the highest value and the column after / before it, controlled by
+    ``window`` and ``offset``, which were removed). It now returns
+    ``pd.Index([end_column, start_column])`` of the interval in which ``row_name`` rises
+    fastest, or ``None`` with a warning if it never rises. See :func:`find_steepest_rise`.
+    """
+    return find_steepest_rise(df, row_name)
+
+
+def _nan_fc(index):
+    """A fold-change table with NaN for every gene (used when the target has no rising step)."""
+    out = pd.DataFrame({'log2FoldChange': np.full(len(index), np.nan)}, index=index.copy())
+    out.index.name = 'Name'
+    return out
 
 
 # ********* df for fc ************
-def df_for_fc(df1, target, df2, design, window='after', offset=1):
+def df_for_fc(df1, target, df2, design):
     """
     Generate the design matrix and matrix for computing the FC score.
     
@@ -104,31 +103,37 @@ def df_for_fc(df1, target, df2, design, window='after', offset=1):
         target (str): The name of the row to be detected (Capsaicin).
         df2 (pandas DataFrame): The DataFrame for fc computing (gene).
         design (pandas DataFrame): study design, the sample and group information.
-        window, offset: see ``find_noontide``.
     
     Returns:
         volcano_df (pandas DataFrame): Modified matrix for computing FC score (a copy).
         volcano_design (pandas DataFrame): Modified design matrix (a copy; rows in the order of
-            the columns of ``df2``). Its
-            ``attrs['contrast']`` is ``(peak_group, comparison_group)``; ``fc_comp`` uses it so
-            that log2FoldChange = log2(peak / comparison).
-    """
-    noontide = find_noontide(df1, target, window=window, offset=offset)
-    peak_group, other_group = noontide[0], noontide[1]
+            the columns of ``df2``). Its ``attrs['contrast']`` is ``(end_group, start_group)``,
+            the interval in which the target rises fastest (``find_steepest_rise``); ``fc_comp``
+            uses it so that log2FoldChange = log2(end / start).
 
-    volcano_design = design[design['group'].isin(noontide)].copy()
+    Raises:
+        ValueError: the target has no rising step (a warning is issued as well), or a group of
+            the interval is not in ``design['group']``.
+    """
+    rise = find_steepest_rise(df1, target)
+    if rise is None:
+        raise ValueError(f"The target '{target}' has no rising step, so there is no interval to "
+                         "compare (see the warning above).")
+    end_group, start_group = rise[0], rise[1]
+
+    volcano_design = design[design['group'].isin(rise)].copy()
     # samples in the order of the data columns (time order), not the row order of design
     not_in_data = [c for c in volcano_design.index if c not in df2.columns]
     if not_in_data:
         raise KeyError(f"Samples of design not found in the columns of the gene table: {not_in_data}")
     volcano_design = volcano_design.loc[[c for c in df2.columns if c in volcano_design.index]]
     present = set(volcano_design['group'])
-    absent = [g for g in (peak_group, other_group) if g not in present]
+    absent = [g for g in (end_group, start_group) if g not in present]
     if absent:
-        raise ValueError(f"Group(s) {absent} found by find_noontide are not in design['group'].")
+        raise ValueError(f"Group(s) {absent} of the rising step are not in design['group'].")
 
     volcano_df = df2[list(volcano_design.index)].copy()
-    volcano_design.attrs = {'contrast': (peak_group, other_group)}
+    volcano_design.attrs = {'contrast': (end_group, start_group)}
 
     return volcano_df, volcano_design
 
@@ -137,12 +142,12 @@ def no_repeat_fc(df, noontide, pseudocount=1.0):
     """
     Compute the FC score for each gene. This function is used for Study Design that has no biological repeats.
 
-    log2FoldChange = log2((peak + pseudocount) / (comparison + pseudocount)).
+    log2FoldChange = log2((end + pseudocount) / (start + pseudocount)).
     A pseudocount keeps zero expression finite (0 vs 0 gives 0). NaN in either column gives NaN.
     
     Parameters:
         df (pandas DataFrame): The DataFrame for fc computing (gene).
-        noontide (list): The two column names ``[peak, comparison]`` (from find_noontide).
+        noontide (list): The two column names ``[end, start]`` (from ``find_steepest_rise``).
         pseudocount (float): Added to both columns before the ratio; must be > 0.
     
     Returns:
@@ -171,7 +176,7 @@ def no_repeat_fc(df, noontide, pseudocount=1.0):
 
 
 def _resolve_contrast(contrast, metadata, sample_order=None):
-    """Return (peak, comparison). Without a contrast, the first two groups in order of
+    """Return (end, start). Without a contrast, the first two groups in order of
     appearance are used; "order" is the order of ``sample_order`` (the columns of the count
     table = the time order of the data file), not the row order of ``metadata``."""
     if sample_order is not None and all(c in metadata.index for c in sample_order):
@@ -190,7 +195,7 @@ def _resolve_contrast(contrast, metadata, sample_order=None):
             f"log2({contrast[0]} / {contrast[1]}).", UserWarning, stacklevel=3)
     contrast = tuple(contrast)
     if len(contrast) != 2 or contrast[0] == contrast[1]:
-        raise ValueError(f"contrast must be two different group names (peak, comparison), got {contrast!r}.")
+        raise ValueError(f"contrast must be two different group names (end, start), got {contrast!r}.")
     missing = [g for g in contrast if g not in groups_in_order]
     if missing:
         raise ValueError(f"contrast group(s) {missing} not found in metadata['group'] {groups_in_order}.")
@@ -315,15 +320,15 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     """
     Perform a DESeq2 (pydeseq2) analysis given raw counts and sample metadata.
 
-    log2FoldChange is log2(contrast[0] / contrast[1]), i.e. peak group / comparison group,
-    explicitly (the comparison group is set as the reference level), independent of the
-    alphabetical order of the group names.
+    log2FoldChange is log2(contrast[0] / contrast[1]), i.e. end group / start group of the
+    interval in which the target rises fastest, explicitly (the start group is the reference
+    level), independent of the alphabetical order of the group names.
     
     Parameters:
     - counts_df (DataFrame): genes x samples RAW COUNTS (DESeq2 needs counts, not TPM/FPKM;
       a warning is issued for clearly non-integer input; values are rounded).
     - metadata (DataFrame): index = sample names, column 'group'. Not modified.
-    - contrast (tuple): (peak_group, comparison_group). If None, ``metadata.attrs['contrast']``
+    - contrast (tuple): (end_group, start_group). If None, ``metadata.attrs['contrast']``
       (set by df_for_fc) is used; otherwise the first two groups in order of appearance are
       used, with a warning.
     - shrink (bool): apply pydeseq2 apeGLM LFC shrinkage (``lfc_shrink``) to the log2FoldChange
@@ -333,6 +338,9 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     
     Returns:
     - DataFrame: pydeseq2 results (baseMean, log2FoldChange, lfcSE, stat, pvalue, padj),
+      with ``attrs['lfc_shrunk']`` = True if the apeGLM shrinkage was applied to
+      log2FoldChange, False if ``shrink=False`` or the shrinkage failed and the unshrunk value
+      is returned (a warning is issued in the latter case),
       index named 'Name' (the gene labels of ``counts_df``, with their original type -- e.g. int
       gene ids stay int; pydeseq2 itself converts them to str). Genes with total count < 10 are
       dropped.
@@ -428,6 +436,7 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
             "is set by the explicit contrast, so this is only a warning; please check the result.",
             UserWarning, stacklevel=2)
 
+    shrunk = False
     if shrink:
         unshrunk = stat_res.results_df.copy()
         coeff_candidates = [c for c in stat_res.LFC.columns if c != 'Intercept']
@@ -449,27 +458,33 @@ def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
             warnings.warn(f"LFC shrinkage skipped, returning unshrunk log2FoldChange: {reason}.",
                           UserWarning, stacklevel=2)
             stat_res.results_df = unshrunk
+        else:
+            shrunk = True
 
     result = stat_res.results_df.copy()
     result.index = _restore_gene_labels(result.index, counts_df.index)
     result.index.name = 'Name'
+    result.attrs['lfc_shrunk'] = shrunk
     return result
 
 
 def compute_fc(
     gene_file, metabo_file, design_file=None, aggregation_func=None, target=None,
-    window='after', offset=1, shrink=True, n_cpus=None, pseudocount=1.0,
+    shrink=True, n_cpus=None, pseudocount=1.0,
 ):
     """
-    Read the files and compute the fold change of every gene between the peak time point of
-    ``target`` and its neighbouring time point (see ``find_noontide``).
+    Read the files and compute the fold change of every gene over the interval in which
+    ``target`` rises fastest (see ``find_steepest_rise``): log2(expression at the end time
+    point / expression at the start time point).
 
     With a design file: replicates are aggregated by ``aggregation_func`` (default
-    ``repeat_aggregation_mean``) to find the peak, and DESeq2 (``fc_comp``) is run on the raw
-    gene table. Without a design file: ``no_repeat_fc`` is used.
+    ``repeat_aggregation_mean``) to find the interval, and DESeq2 (``fc_comp``) is run on the
+    raw gene table. Without a design file: ``no_repeat_fc`` is used. If the target never rises
+    a warning is issued and ``log2FoldChange`` is NaN for all genes.
 
     Returns:
-        DataFrame with a 'log2FoldChange' column (index named 'Name').
+        DataFrame with a 'log2FoldChange' column (index named 'Name'); ``attrs['fc_contrast']``
+        is ``(end, start)`` (None if there is no rising step).
     """
     if target is None:
         raise ValueError("target (the name of the target metabolite) is required.")
@@ -489,12 +504,18 @@ def compute_fc(
         if aggregation_func is None:
             aggregation_func = repeat_aggregation_mean
         processed_metabo = aggregation_func(metabo, design)
-        counts_df, design_sub = df_for_fc(processed_metabo, target, gene, design,
-                                          window=window, offset=offset)
-        fc = fc_comp(counts_df, design_sub, shrink=shrink, n_cpus=n_cpus)
-        
+        rise = find_steepest_rise(processed_metabo, target)
+        if rise is None:
+            fc = _nan_fc(gene.index)
+        else:
+            counts_df, design_sub = df_for_fc(processed_metabo, target, gene, design)
+            fc = fc_comp(counts_df, design_sub, shrink=shrink, n_cpus=n_cpus)
     else:
-        noontide = find_noontide(metabo, target, window=window, offset=offset)
-        fc = no_repeat_fc(gene, noontide, pseudocount=pseudocount)
-    
+        rise = find_steepest_rise(metabo, target)
+        if rise is None:
+            fc = _nan_fc(gene.index)
+        else:
+            fc = no_repeat_fc(gene, rise, pseudocount=pseudocount)
+
+    fc.attrs['fc_contrast'] = None if rise is None else (rise[0], rise[1])
     return fc

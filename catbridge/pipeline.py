@@ -19,7 +19,7 @@ from .metrics import (
     compute_pearson,
     ts_clustering,
 )
-from .foldchange import find_noontide, df_for_fc, no_repeat_fc, fc_comp
+from .foldchange import find_steepest_rise, df_for_fc, no_repeat_fc, fc_comp, _nan_fc
 from .scoring import add_annotation_score, compute_score
 
 __all__ = [
@@ -138,12 +138,13 @@ def pipeline(gene_file, metabo_file, design_file, annotation_file, target, clust
       'Granger', 'CCM', 'CCA', 'DTW', 'CCF', 'Spearman', 'Pearson' (default 'Granger').
     - **kwargs: any other keyword-only argument of :func:`compute_corr`
       (E, tau, n_components are positional-or-keyword there, so pass them by name here;
-      fc_window, fc_offset, pseudocount, shrink, n_cpus, random_state, dtw_method, verbose).
+      pseudocount, shrink, n_cpus, random_state, dtw_method, verbose).
 
     Returns:
     - result (pd.DataFrame): the output of ``compute_score(data, score_col)``: columns
       'Name', score_col, 'log2FoldChange', ('Cluster'), 'Score', (f'{score_col}_padj'),
       sorted best first, indexed by the rank (index name 'Rank', starting at 1).
+      ``result.attrs['fc_contrast']`` = ``(end, start)``, the two time points of the fold change.
     """
     for reserved in ('lag', 'metrics'):
         if reserved in kwargs:
@@ -161,6 +162,7 @@ def pipeline(gene_file, metabo_file, design_file, annotation_file, target, clust
     )
     result = compute_score(data, score_col)
     result.index.name = 'Rank'
+    result.attrs.update({k: v for k, v in data.attrs.items() if k in ('fc_contrast', 'lfc_shrunk')})
     return result
 
 
@@ -168,7 +170,7 @@ def compute_corr(
     gene_file, metabo_file, design_file, annotation_file,
     target, cluster_count, aggregation_func=None,
     lag=1, E=3, tau=1, n_components=1,
-    *, metrics=None, fc_window='after', fc_offset=1, pseudocount=1.0,
+    *, metrics=None, pseudocount=1.0,
     shrink=True, n_cpus=None, random_state=0, dtw_method='fastdtw', verbose=False
 ):
     """
@@ -203,8 +205,6 @@ def compute_corr(
     - metrics (list of str, optional): which metrics to compute, from
       'Granger', 'CCM', 'CCA', 'DTW', 'CCF', 'Spearman', 'Pearson'. None (default) = all.
       Unknown names raise ValueError.
-    - fc_window ('after' or 'before'), fc_offset (int >= 1): which time point the peak time point
-      of the target is compared with, see ``find_noontide``. Default: the time point right after.
     - pseudocount (float): pseudocount of the fold change when there is no design file
       (``no_repeat_fc``).
     - shrink (bool), n_cpus (int or None): passed to ``fc_comp`` (DESeq2) when there is a design file.
@@ -219,6 +219,11 @@ def compute_corr(
       file the other DESeq2 columns), 'Cluster' (if clustering ran) and, with an annotation file,
       'Description' and 'Description_Score'. Genes for which a quantity cannot be computed
       (e.g. a constant series, or too few counts for DESeq2) have NaN there.
+      ``result.attrs['fc_contrast']`` = ``(end, start)``: the two time points (groups) of the
+      fold change, log2FoldChange = log2(expression at end / expression at start) (None if
+      the target never rises: then log2FoldChange is NaN for all genes and a warning is issued).
+      With a design file ``result.attrs['lfc_shrunk']`` is True if the DESeq2 LFC shrinkage was
+      applied and False if it was switched off or failed (unshrunk values are returned).
 
     Raises:
     - ValueError: unknown metric names; ``n_components`` other than 1 (when CCA is computed); the gene and metabolite tables do not have the same
@@ -237,7 +242,9 @@ def compute_corr(
     - If the design_file is provided, the data will be aggregated based on the provided aggregation_func.
       All time-series metrics and the clustering are computed on the aggregated tables; the fold change
       is computed by DESeq2 on the raw (unaggregated) gene counts of the two groups that
-      ``find_noontide`` picks from the aggregated target, as log2(peak group / comparison group).
+      bound the interval in which the aggregated target rises fastest
+      (``find_steepest_rise``), as log2(end group / start group). Without a design file it is
+      log2((x_end + pseudocount) / (x_start + pseudocount)) of that interval.
       Without a design file the tables are used as they are (columns = time points).
       The time order is always the column order of the data files (with a design file: the order in
       which the groups first appear in the data columns), never the row order of the design file.
@@ -292,21 +299,33 @@ def compute_corr(
         _check_aligned(processed_gene.columns, processed_metabo.columns, 'time points (groups)')
         t = get_target(target, processed_metabo)
         _check_target(t, target, processed_metabo.columns)
-        # Fold change: DESeq2 on the raw counts of the peak / comparison groups
-        counts, design_sub = df_for_fc(processed_metabo, target, gene, design,
-                                       window=fc_window, offset=fc_offset)
-        say(f"fold change: DESeq2 on {counts.shape[0]} genes x {counts.shape[1]} samples "
-            f"(groups {design_sub.attrs.get('contrast')}); this is the slowest step")
-        fc = fc_comp(counts, design_sub, contrast=design_sub.attrs.get('contrast'),
-                     shrink=shrink, n_cpus=n_cpus)
+        # Fold change: DESeq2 on the raw counts of the two groups of the steepest rise
+        rise = find_steepest_rise(processed_metabo, target)
+        if rise is None:      # warned; no interval to compare
+            fc = _nan_fc(gene.index)
+        else:
+            counts, design_sub = df_for_fc(processed_metabo, target, gene, design)
+            say(f"fold change: log2({rise[0]} / {rise[1]}), the interval in which {target} rises "
+                f"fastest; DESeq2 on {counts.shape[0]} genes x {counts.shape[1]} samples "
+                "(this is the slowest step)")
+            fc = fc_comp(counts, design_sub, contrast=design_sub.attrs.get('contrast'),
+                         shrink=shrink, n_cpus=n_cpus)
     else:
         _check_aligned(gene.columns, metabo.columns, 'columns (time points)')
         processed_gene = gene
         processed_metabo = metabo
         t = get_target(target, metabo)
         _check_target(t, target, metabo.columns)
-        noontide = find_noontide(metabo, target, window=fc_window, offset=fc_offset)
-        fc = no_repeat_fc(gene, noontide, pseudocount=pseudocount)
+        rise = find_steepest_rise(metabo, target)
+        if rise is None:      # warned; no interval to compare
+            fc = _nan_fc(gene.index)
+        else:
+            say(f"fold change: log2({rise[0]} / {rise[1]}), the interval in which {target} rises fastest")
+            fc = no_repeat_fc(gene, rise, pseudocount=pseudocount)
+    if rise is None:
+        say(f"fold change: {target} never rises; log2FoldChange is NaN for all genes")
+    fc_contrast = None if rise is None else (rise[0], rise[1])
+    lfc_shrunk = fc.attrs.get('lfc_shrunk')
 
     n_time = processed_gene.shape[1]
     if n_time <= 3:
@@ -362,5 +381,8 @@ def compute_corr(
         data = _merge_annotation(data, annotation)
         data = add_annotation_score(data)  # Add a new column for annotation score
 
+    data.attrs['fc_contrast'] = fc_contrast
+    if lfc_shrunk is not None:
+        data.attrs['lfc_shrunk'] = lfc_shrunk
     say("done")
     return data

@@ -7,7 +7,7 @@ import pytest
 
 from catbridge import foldchange as fcm
 from catbridge.foldchange import (
-    compute_fc, df_for_fc, fc_comp, find_noontide, no_repeat_fc,
+    compute_fc, df_for_fc, fc_comp, find_noontide, find_steepest_rise, no_repeat_fc,
 )
 
 
@@ -16,90 +16,79 @@ def _row_df(values, cols=None, name='T'):
     return pd.DataFrame([values], index=[name], columns=cols)
 
 
-# ---------------------------------------------------------------- find_noontide
-@pytest.mark.parametrize("values,window,offset,expected", [
-    # peak in the middle (index 2 of 6)
-    ([1, 2, 9, 3, 1, 0], 'after', 1, ['c2', 'c3']),
-    ([1, 2, 9, 3, 1, 0], 'after', 2, ['c2', 'c4']),
-    ([1, 2, 9, 3, 1, 0], 'before', 1, ['c2', 'c1']),
-    ([1, 2, 9, 3, 1, 0], 'before', 2, ['c2', 'c0']),
-    # peak in the first column, window='after' works
-    ([9, 2, 1, 3, 1, 0], 'after', 1, ['c0', 'c1']),
-    ([9, 2, 1, 3, 1, 0], 'after', 2, ['c0', 'c2']),
-    # peak in the last column, window='before' works
-    ([1, 2, 1, 3, 1, 9], 'before', 1, ['c5', 'c4']),
-    ([1, 2, 1, 3, 1, 9], 'before', 2, ['c5', 'c3']),
+# ---------------------------------------------------------------- find_steepest_rise
+@pytest.mark.parametrize("values,expected", [
+    # step in the middle: c1 -> c2 (+7)
+    ([1, 2, 9, 3, 1, 0], ['c2', 'c1']),
+    # first step (+8); the maximum of the series (c3) is NOT what counts
+    ([0, 8, 9, 10, 0], ['c1', 'c0']),
+    # last step
+    ([5, 4, 3, 9], ['c3', 'c2']),
+    # a tie goes to the earliest step
+    ([0, 5, 5, 10, 10], ['c1', 'c0']),
+    ([0, 4, 0, 4], ['c1', 'c0']),
+    # pairs with NaN are skipped (1 -> 9 across the NaN does not count)
+    ([1, np.nan, 9, 10, 2], ['c3', 'c2']),
+    ([1, 5, np.nan, 4, 20], ['c4', 'c3']),
+    # decreases before the rise do not matter; negative numbers are fine
+    ([-5, -9, -8, -1, -3], ['c3', 'c2']),
+    # two columns only
+    ([1, 2], ['c1', 'c0']),
 ])
-def test_find_noontide_in_range(values, window, offset, expected):
+def test_steepest_rise_choice(values, expected):
     with warnings.catch_warnings():
-        warnings.simplefilter('error')  # no fallback warning expected
-        res = find_noontide(_row_df(values), 'T', window=window, offset=offset)
+        warnings.simplefilter('error')       # no warning expected
+        res = find_steepest_rise(_row_df(values), 'T')
     assert isinstance(res, pd.Index)
-    assert list(res) == expected
+    assert list(res) == expected             # [end (i+1), start (i)]
 
 
-def test_find_noontide_default_is_after_offset1():
-    df = _row_df([1, 5, 2, 1])
-    assert list(find_noontide(df, 'T')) == ['c1', 'c2']
+def test_steepest_rise_is_not_the_peak_logic():
+    # old rule: peak = c4 -> compared with c5; new rule: the biggest step is c0 -> c1
+    df = _row_df([0, 6, 6.5, 7, 9, 8])
+    assert list(find_steepest_rise(df, 'T')) == ['c1', 'c0']
 
 
-def test_find_noontide_peak_last_column_after_falls_back_with_warning():
-    df = _row_df([1, 2, 3, 9])
-    with pytest.warns(UserWarning, match="no column 1"):
-        res = find_noontide(df, 'T', window='after', offset=1)
-    # old behaviour used the 2nd highest column (c2/c3 pair unrelated to the peak) -> now c3 vs c2
-    assert list(res) == ['c3', 'c2']
+@pytest.mark.parametrize("values,why", [
+    ([9, 5, 2, 1], "never increase"),               # monotone decreasing
+    ([3, 3, 3, 3], "never increase"),               # constant
+    ([1, np.nan, 5, np.nan, 7], "without missing"),  # no valid adjacent pair
+])
+def test_steepest_rise_none_with_warning_when_target_never_rises(values, why):
+    with pytest.warns(UserWarning, match=why):
+        assert find_steepest_rise(_row_df(values), 'T') is None
 
 
-def test_find_noontide_peak_first_column_before_falls_back_with_warning():
-    df = _row_df([9, 2, 3, 1])
-    with pytest.warns(UserWarning):
-        res = find_noontide(df, 'T', window='before', offset=1)
-    assert list(res) == ['c0', 'c1']
-
-
-def test_find_noontide_offset2_fallback_other_side_and_both_sides_missing():
-    df = _row_df([1, 2, 3, 9])
-    with pytest.warns(UserWarning):
-        assert list(find_noontide(df, 'T', 'after', 2)) == ['c3', 'c1']
-    short = _row_df([1, 9, 1])  # peak in the middle, offset 2 impossible on both sides
-    with pytest.raises(ValueError):
-        find_noontide(short, 'T', 'after', 2)
-    with pytest.raises(ValueError):
-        find_noontide(_row_df([5.0]), 'T')  # single column
-
-
-def test_find_noontide_does_not_use_second_highest_when_peak_is_last():
-    # old behaviour: peak last -> picked the second highest column (c0) and its successor (c1)
-    df = _row_df([8, 1, 1, 9])
-    with pytest.warns(UserWarning):
-        res = find_noontide(df, 'T')
-    assert res[0] == 'c3'
-
-
-def test_find_noontide_errors():
-    df = _row_df([np.nan, np.nan, np.nan])
-    with pytest.raises(ValueError, match="only non-numeric or missing"):
-        find_noontide(df, 'T')
+def test_steepest_rise_errors():
     with pytest.raises(KeyError, match="nope"):
-        find_noontide(_row_df([1, 2]), 'nope')
-    with pytest.raises(ValueError):
-        find_noontide(_row_df([1, 2]), 'T', window='sideways')
-    with pytest.raises(ValueError):
-        find_noontide(_row_df([1, 2]), 'T', offset=0)
+        find_steepest_rise(_row_df([1, 2]), 'nope')
+    with pytest.raises(ValueError, match="at least two"):
+        find_steepest_rise(_row_df([5.0]), 'T')
+    dup = pd.concat([_row_df([1, 2, 3]), _row_df([3, 2, 1])])
+    with pytest.raises(ValueError, match="not unique"):
+        find_steepest_rise(dup, 'T')
 
 
-def test_find_noontide_ignores_nan_and_does_not_modify_input():
-    df = _row_df([1, np.nan, 7, 2])
+def test_steepest_rise_does_not_modify_input_and_uses_column_order():
+    df = _row_df([1, np.nan, 7, 2, 30], cols=['d9', 'd12', 'd30', 'd7', 'd2'])
     before = df.copy()
-    assert list(find_noontide(df, 'T')) == ['c2', 'c3']
+    # 'd7' -> 'd2' (+28): the column order of the table is the time order, not the names
+    assert list(find_steepest_rise(df, 'T')) == ['d2', 'd7']
     pd.testing.assert_frame_equal(df, before)
 
 
-def test_find_noontide_reproduces_paper_version_when_peak_far_enough():
-    # case-study version: [peak, column two positions before the peak]
-    df = _row_df([1, 2, 3, 9, 4])
-    assert list(find_noontide(df, 'T', window='before', offset=2)) == ['c3', 'c1']
+def test_find_noontide_is_the_old_name_of_find_steepest_rise():
+    df = _row_df([1, 2, 9, 3, 1, 0])
+    assert list(find_noontide(df, 'T')) == ['c2', 'c1']       # [end, start], not [peak, next]
+    with pytest.warns(UserWarning, match="No rising step"):
+        assert find_noontide(_row_df([3, 2, 1]), 'T') is None
+    # the 1.x arguments are gone
+    with pytest.raises(TypeError):
+        find_noontide(df, 'T', window='after')
+    with pytest.raises(TypeError):
+        find_noontide(df, 'T', offset=1)
+    with pytest.raises(TypeError):
+        find_steepest_rise(df, 'T', 'after', 1)
 
 
 # ---------------------------------------------------------------- no_repeat_fc
@@ -169,6 +158,7 @@ def _design(groups, reps=3):
 def test_df_for_fc_contrast_attrs_and_copies():
     groups = ['day0', 'day7', 'day16', 'day30']
     design = _design(groups)
+    # steps: day0->day7 +1, day7->day16 +8 (steepest), day16->day30 -7
     metabo_agg = pd.DataFrame([[1, 2, 10, 3]], index=['Cap'], columns=groups)
     rng = np.random.default_rng(1)
     gene = pd.DataFrame(rng.integers(0, 100, (5, len(design))), columns=design.index,
@@ -176,17 +166,30 @@ def test_df_for_fc_contrast_attrs_and_copies():
     gene_before, design_before = gene.copy(), design.copy()
 
     counts, dsub = df_for_fc(metabo_agg, 'Cap', gene, design)
-    assert dsub.attrs['contrast'] == ('day16', 'day30')
-    assert set(dsub['group']) == {'day16', 'day30'}
+    assert dsub.attrs['contrast'] == ('day16', 'day7')       # (end, start)
+    assert set(dsub['group']) == {'day7', 'day16'}
     assert list(counts.columns) == list(dsub.index)
     pd.testing.assert_frame_equal(gene, gene_before)
     pd.testing.assert_frame_equal(design, design_before)
     assert 'contrast' not in design.attrs
 
-    counts2, dsub2 = df_for_fc(metabo_agg, 'Cap', gene, design, window='before', offset=2)
-    assert dsub2.attrs['contrast'] == ('day16', 'day0')
-    dsub2.loc[dsub2.index[0], 'group'] = 'zzz'  # copy: does not leak to the design
+    dsub.loc[dsub.index[0], 'group'] = 'zzz'  # copy: does not leak to the design
     pd.testing.assert_frame_equal(design, design_before)
+
+
+def test_df_for_fc_removed_arguments_and_no_rise():
+    groups = ['day0', 'day7', 'day16']
+    design = _design(groups)
+    gene = pd.DataFrame(np.ones((2, len(design))), columns=design.index, index=['g0', 'g1'])
+    metabo_agg = pd.DataFrame([[1, 2, 10]], index=['Cap'], columns=groups)
+    with pytest.raises(TypeError):
+        df_for_fc(metabo_agg, 'Cap', gene, design, window='after')
+    with pytest.raises(TypeError):
+        df_for_fc(metabo_agg, 'Cap', gene, design, offset=1)
+    falling = pd.DataFrame([[10, 5, 1]], index=['Cap'], columns=groups)
+    with pytest.warns(UserWarning, match="No rising step"):
+        with pytest.raises(ValueError, match="no rising step"):
+            df_for_fc(falling, 'Cap', gene, design)
 
 
 def test_df_for_fc_samples_follow_data_columns_not_design_row_order():
@@ -200,7 +203,7 @@ def test_df_for_fc_samples_follow_data_columns_not_design_row_order():
     counts, dsub = df_for_fc(metabo_agg, 'Cap', gene, shuffled)
     assert list(counts.columns) == [c for c in gene.columns if c in dsub.index]
     assert list(dsub.index) == list(counts.columns)
-    assert dsub.attrs['contrast'] == ('day16', 'day30')   # contrast comes from find_noontide
+    assert dsub.attrs['contrast'] == ('day16', 'day7')    # contrast comes from the target series
 
 
 def test_df_for_fc_sample_missing_from_gene_table_raises_keyerror():
@@ -342,6 +345,28 @@ def test_fc_comp_sign_independent_of_group_naming(deseq_ok):
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-3, atol=1e-4)
 
 
+def test_fc_comp_lfc_shrunk_attr_true_false_and_fallback(deseq_ok, monkeypatch):
+    counts, meta, _ = _make_counts('day9', 'day12', seed=4, n_genes=60)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert fc_comp(counts, meta, contrast=('day9', 'day12'), shrink=True).attrs['lfc_shrunk'] is True
+        assert fc_comp(counts, meta, contrast=('day9', 'day12'), shrink=False).attrs['lfc_shrunk'] is False
+
+    from pydeseq2.ds import DeseqStats
+
+    def boom(self, *a, **k):
+        raise RuntimeError("no convergence")
+
+    monkeypatch.setattr(DeseqStats, 'lfc_shrink', boom)
+    with pytest.warns(UserWarning, match="shrinkage skipped"):
+        res = fc_comp(counts, meta, contrast=('day9', 'day12'), shrink=True)
+    assert res.attrs['lfc_shrunk'] is False         # the unshrunk values are returned
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        raw = fc_comp(counts, meta, contrast=('day9', 'day12'), shrink=False)
+    np.testing.assert_allclose(res['log2FoldChange'].to_numpy(), raw['log2FoldChange'].to_numpy())
+
+
 def test_fc_comp_swapped_contrast_flips_sign(deseq_ok):
     counts, meta, n_up = _make_counts('day9', 'day12', seed=5)
     with warnings.catch_warnings():
@@ -400,20 +425,47 @@ def test_fc_comp_warns_on_non_count_input_and_validates(deseq_ok):
 
 
 # ---------------------------------------------------------------- compute_fc (no-replicate path, files)
-def test_compute_fc_without_design_passes_window_and_offset(tmp_path):
-    cols = ['s1', 's2', 's3', 's4']
-    gene = pd.DataFrame([[1, 10, 3, 4], [0, 0, 0, 0]], index=['g1', 'g2'], columns=cols)
+def _write_tables(tmp_path, gene_rows, metabo_row, cols=('s1', 's2', 's3', 's4')):
+    gene = pd.DataFrame(gene_rows, index=[f'g{i + 1}' for i in range(len(gene_rows))],
+                        columns=list(cols))
     gene.index.name = 'Name'
-    metabo = pd.DataFrame([[1, 9, 2, 1]], index=['T'], columns=cols)
+    metabo = pd.DataFrame([metabo_row], index=['T'], columns=list(cols))
     metabo.index.name = 'Name'
     gp, mp = tmp_path / 'gene.csv', tmp_path / 'metabo.csv'
     gene.to_csv(gp)
     metabo.to_csv(mp)
-    fc = compute_fc(str(gp), str(mp), target='T')
-    assert fc.loc['g1', 'log2FoldChange'] == pytest.approx(np.log2(11 / 4))
+    return str(gp), str(mp)
+
+
+def test_compute_fc_without_design_uses_steepest_rise_end_over_start(tmp_path):
+    # target steps: +8 (s1 -> s2), -7, -1: the fold change is s2 / s1
+    gp, mp = _write_tables(tmp_path, [[1, 10, 3, 4], [0, 0, 0, 0], [40, 10, 3, 4]], [1, 9, 2, 1])
+    fc = compute_fc(gp, mp, target='T')
+    assert fc.loc['g1', 'log2FoldChange'] == pytest.approx(np.log2(11 / 2))    # up: positive
     assert fc.loc['g2', 'log2FoldChange'] == 0.0
-    fc_b = compute_fc(str(gp), str(mp), target='T', window='before', offset=1)
-    assert fc_b.loc['g1', 'log2FoldChange'] == pytest.approx(np.log2(11 / 2))
+    assert fc.loc['g3', 'log2FoldChange'] == pytest.approx(np.log2(11 / 41))   # down: negative
+    assert fc.attrs['fc_contrast'] == ('s2', 's1')
+    assert list(fc.index) == ['g1', 'g2', 'g3'] and fc.index.name == 'Name'
+    # pseudocount is used in numerator and denominator
+    fc5 = compute_fc(gp, mp, target='T', pseudocount=5.0)
+    assert fc5.loc['g1', 'log2FoldChange'] == pytest.approx(np.log2(15 / 6))
+
+
+def test_compute_fc_removed_arguments(tmp_path):
+    gp, mp = _write_tables(tmp_path, [[1, 10, 3, 4]], [1, 9, 2, 1])
+    with pytest.raises(TypeError):
+        compute_fc(gp, mp, target='T', window='before')
+    with pytest.raises(TypeError):
+        compute_fc(gp, mp, target='T', offset=1)
+
+
+def test_compute_fc_target_never_rises_gives_nan_with_warning(tmp_path):
+    gp, mp = _write_tables(tmp_path, [[1, 10, 3, 4], [5, 5, 5, 5]], [9, 5, 2, 1])
+    with pytest.warns(UserWarning, match="No rising step"):
+        fc = compute_fc(gp, mp, target='T')
+    assert fc['log2FoldChange'].isna().all()
+    assert list(fc.index) == ['g1', 'g2'] and fc.index.name == 'Name'
+    assert fc.attrs['fc_contrast'] is None
 
 
 def test_compute_fc_requires_target(tmp_path):

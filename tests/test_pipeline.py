@@ -99,6 +99,7 @@ def _fake_fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     m0 = counts_df.loc[:, (g == other).to_numpy()].mean(axis=1)
     out = pd.DataFrame({'log2FoldChange': np.log2((m1 + 1) / (m0 + 1))})
     out.index.name = 'Name'
+    out.attrs['lfc_shrunk'] = bool(shrink)
     return out
 
 
@@ -156,7 +157,7 @@ def test_compute_corr_signature():
     assert all(p.kind is p.POSITIONAL_OR_KEYWORD for p in params[:11])
     kwonly = {p.name: p.default for p in params[11:]}
     assert all(p.kind is p.KEYWORD_ONLY for p in params[11:])
-    assert kwonly == dict(metrics=None, fc_window='after', fc_offset=1, pseudocount=1.0,
+    assert kwonly == dict(metrics=None, pseudocount=1.0,
                           shrink=True, n_cpus=None, random_state=0,
                           dtw_method='fastdtw', verbose=False)   # last two: speed/input-check update
 
@@ -179,9 +180,13 @@ def test_compute_corr_no_design(data):
     for c in EXPECTED_METRIC_COLS + ['log2FoldChange', 'Description', 'Description_Score']:
         assert c in out.columns, c
     assert 'Cluster' not in out.columns
-    # 'log2FoldChange' of the planted gene: peak day30 (700) vs day50 (150) -> clearly positive
+    # the target rises fastest from day16 to day30 (+6e5): FC = log2(day30 / day16)
+    assert out.attrs['fc_contrast'] == ('day30', 'day16')
     lfc = out.set_index('Name')['log2FoldChange']
-    assert lfc[TRUE_GENE] > 1.5
+    # planted gene: day16 300 -> day30 700, log2(701 / 301) = 1.22
+    assert lfc[TRUE_GENE] == pytest.approx(np.log2(701 / 301), abs=0.35)
+    # decoys G00-G02 have the reversed profile (day16 700 -> day30 300): negative
+    assert (lfc[['G00', 'G01', 'G02']] < -0.8).all()
     assert out.set_index('Name').loc[TRUE_GENE, 'Description_Score'] == pytest.approx(0.2)
 
 
@@ -327,54 +332,135 @@ def test_default_compute_corr_ccm_column_has_values_matching_compute_ccm(tmp_pat
     np.testing.assert_allclose(got['CCM_p'].to_numpy(), want['CCM_p'].to_numpy())
 
 
-# ------------------------------------------------------------------ fc_offset
-def test_fc_offset_reaches_find_noontide_no_design(data, monkeypatch):
-    seen = []
-    real = pl.find_noontide
-
-    def spy(df, row_name, window='after', offset=1):
-        seen.append((window, offset))
-        return real(df, row_name, window=window, offset=offset)
-
-    monkeypatch.setattr(pl, 'find_noontide', spy)
-    kw = dict(metrics=['Pearson'])
-    a = compute_corr(*_args(data, design=False, annotation=False), TARGET, None, **kw)
-    b = compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
-                     fc_offset=2, **kw)
-    assert seen == [('after', 1), ('after', 2)]
-    la, lb = a.set_index('Name')['log2FoldChange'], b.set_index('Name')['log2FoldChange']
-    assert not np.allclose(la, lb.reindex(la.index))
-    # planted gene: peak day30 (700) vs day50 (150) with offset 1, vs day60 (50) with offset 2
-    assert la[TRUE_GENE] == pytest.approx(np.log2(701 / 151), abs=0.4)
-    assert lb[TRUE_GENE] == pytest.approx(np.log2(701 / 51), abs=0.5)
-    assert lb[TRUE_GENE] > la[TRUE_GENE] + 0.8
+# ------------------------------------------------------------------ fold change definition
+def test_old_peak_window_arguments_are_removed(data):
+    for kw in (dict(fc_window='before'), dict(fc_offset=2), dict(fc_window='after', fc_offset=1)):
+        with pytest.raises(TypeError):
+            compute_corr(*_args(data, design=False), TARGET, None, **kw)
+        with pytest.raises(TypeError):
+            pipeline(data['gene_mean'], data['metabolite_mean'], None, None, TARGET, None, **kw)
+    assert 'fc_window' not in inspect.signature(compute_corr).parameters
+    assert 'fc_offset' not in inspect.signature(compute_corr).parameters
 
 
-def test_fc_offset_reaches_df_for_fc_and_changes_contrast_with_design(data, fake_fc, monkeypatch):
+def test_no_design_fc_is_end_over_start_of_steepest_rise_with_attrs(data):
+    out = compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
+                       metrics=['Pearson'])
+    assert out.attrs['fc_contrast'] == ('day30', 'day16')
+    gene = pd.read_csv(data['gene_mean'], sep='\t', index_col=0)
+    want = np.log2((gene['day30'] + 1.0) / (gene['day16'] + 1.0))      # end / start, pseudocount 1
+    got = out.set_index('Name')['log2FoldChange'].reindex(gene.index)
+    np.testing.assert_allclose(got.to_numpy(), want.to_numpy())
+    assert 'lfc_shrunk' not in out.attrs                                 # DESeq2 only
+    # pseudocount reaches the formula
+    out5 = compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
+                        metrics=['Pearson'], pseudocount=5.0)
+    want5 = np.log2((gene['day30'] + 5.0) / (gene['day16'] + 5.0))
+    np.testing.assert_allclose(out5.set_index('Name')['log2FoldChange'].reindex(gene.index).to_numpy(),
+                               want5.to_numpy())
+
+
+def test_pipeline_result_keeps_fc_contrast(data):
+    res = pipeline(data['gene_mean'], data['metabolite_mean'], None, None, TARGET, None)
+    assert res.attrs['fc_contrast'] == ('day30', 'day16')
+
+
+def test_verbose_prints_the_compared_time_points(data, capsys):
+    compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
+                 metrics=['Pearson'], verbose=True)
+    assert "log2(day30 / day16)" in capsys.readouterr().err
+
+
+def _with_target_series(data, tmp_path, values, name):
+    """Copy the replicate-free metabolite table with a new series for the target."""
+    met = pd.read_csv(data['metabolite_mean'], sep='\t', index_col=0)
+    met.loc[TARGET] = values
+    p = tmp_path / f'{name}.tsv'
+    met.to_csv(p, sep='\t')
+    return str(p)
+
+
+def test_target_never_rises_gives_nan_fc_and_warning_no_design(data, tmp_path):
+    met = _with_target_series(data, tmp_path, [6, 5, 4, 3, 2, 1], 'falling')
+    with pytest.warns(UserWarning, match="No rising step"):
+        out = compute_corr(data['gene_mean'], met, None, None, TARGET, None, metrics=['Pearson'])
+    assert out['log2FoldChange'].isna().all() and len(out) == N_GENES
+    assert out.attrs['fc_contrast'] is None
+    assert out['Pearson'].notna().all()          # the other metrics are still computed
+    # missing FC counts as 0 in the score (existing behaviour): scoring still works
+    scored = compute_score(out, 'Pearson')
+    assert scored['Score'].notna().all()
+
+
+def test_target_never_rises_with_design_does_not_call_deseq2(data, fake_fc, tmp_path):
+    met = pd.read_csv(data['metabolite'], sep='\t', index_col=0)
+    dsg = pd.read_csv(data['design'], sep='\t', index_col=0)['group']
+    level = {g: 6 - i for i, g in enumerate(GROUPS)}                    # falling group means
+    met.loc[TARGET] = [level[dsg[c]] for c in met.columns]
+    p = tmp_path / 'met_falling.tsv'
+    met.to_csv(p, sep='\t')
+    with pytest.warns(UserWarning, match="No rising step"):
+        out = compute_corr(data['gene'], str(p), data['design'], None, TARGET, None,
+                           metrics=['Pearson'])
+    assert fake_fc == []                                                 # DESeq2 never run
+    assert out['log2FoldChange'].isna().all() and len(out) == N_GENES
+    assert out.attrs['fc_contrast'] is None
+
+
+def test_tie_between_steps_takes_the_earliest(data, tmp_path):
+    # steps +2, +2, 0, 0, 0 -> the first one: day0 -> day7
+    met = _with_target_series(data, tmp_path, [1, 3, 5, 5, 5, 5], 'tie')
+    out = compute_corr(data['gene_mean'], met, None, None, TARGET, None, metrics=['Pearson'])
+    assert out.attrs['fc_contrast'] == ('day7', 'day0')
+
+
+def test_fc_interval_of_the_first_and_the_last_step(data, tmp_path):
+    first = _with_target_series(data, tmp_path, [1, 9, 9.5, 9.6, 9.7, 9.8], 'first')
+    last = _with_target_series(data, tmp_path, [5, 4, 3, 2, 1, 9], 'last')
+    a = compute_corr(data['gene_mean'], first, None, None, TARGET, None, metrics=['Pearson'])
+    b = compute_corr(data['gene_mean'], last, None, None, TARGET, None, metrics=['Pearson'])
+    assert a.attrs['fc_contrast'] == ('day7', 'day0')
+    assert b.attrs['fc_contrast'] == ('day60', 'day50')
+
+
+def test_design_path_gets_the_two_groups_of_the_steepest_rise(data, fake_fc, monkeypatch):
     seen = []
     real = pl.df_for_fc
-
-    def spy(df1, target, df2, design, window='after', offset=1):
-        seen.append((window, offset))
-        return real(df1, target, df2, design, window=window, offset=offset)
-
-    monkeypatch.setattr(pl, 'df_for_fc', spy)
-    compute_corr(*_args(data), TARGET, None, metrics=['Pearson'])
-    compute_corr(*_args(data), TARGET, None, metrics=['Pearson'], fc_offset=2)
-    compute_corr(*_args(data), TARGET, None, metrics=['Pearson'], fc_offset=2, fc_window='before')
-    assert seen == [('after', 1), ('after', 2), ('before', 2)]
-    contrasts = [kw['contrast'] for _, _, kw in fake_fc]
-    assert contrasts == [('day30', 'day50'), ('day30', 'day60'), ('day30', 'day7')]
-    assert set(fake_fc[1][0].columns) == {f'{g}_{r}' for g in ('day30', 'day60') for r in (1, 2, 3)}
+    monkeypatch.setattr(pl, 'df_for_fc', lambda *a, **k: (seen.append(k), real(*a, **k))[1])
+    out = compute_corr(*_args(data), TARGET, None, metrics=['Pearson'], shrink=False)
+    assert seen == [{}]                                   # no window / offset arguments any more
+    (counts, meta, kw), = fake_fc
+    assert kw['contrast'] == ('day30', 'day16')           # (end, start)
+    assert meta.attrs['contrast'] == ('day30', 'day16')
+    assert set(counts.columns) == {f'{g}_{r}' for g in ('day30', 'day16') for r in (1, 2, 3)}
+    assert out.attrs['fc_contrast'] == ('day30', 'day16')
+    assert out.attrs['lfc_shrunk'] is False               # shrink=False reached fc_comp
 
 
-def test_fc_offset_through_pipeline_kwargs(data, monkeypatch):
-    seen = []
-    real = pl.find_noontide
-    monkeypatch.setattr(pl, 'find_noontide', lambda df, r, window='after', offset=1: (
-        seen.append(offset), real(df, r, window=window, offset=offset))[1])
-    pipeline(data['gene_mean'], data['metabolite_mean'], None, None, TARGET, None, fc_offset=2)
-    assert seen == [2]
+def test_design_path_direction_with_real_deseq2(data, deseq_ok):
+    import warnings as _w
+    with _w.catch_warnings():
+        _w.simplefilter('ignore')
+        out = compute_corr(*_args(data), TARGET, None, metrics=['Pearson'])
+    assert out.attrs['fc_contrast'] == ('day30', 'day16')
+    assert out.attrs['lfc_shrunk'] is True
+    lfc = out.set_index('Name')['log2FoldChange']
+    assert lfc[TRUE_GENE] > 0.5                           # day16 300 -> day30 700: up
+    assert (lfc[['G00', 'G01', 'G02']] < -0.5).all()      # reversed profile: down
+
+
+def test_lfc_shrunk_false_when_shrinkage_falls_back(data, deseq_ok, monkeypatch):
+    from pydeseq2.ds import DeseqStats
+
+    def boom(self, *a, **k):
+        raise RuntimeError("no convergence")
+
+    monkeypatch.setattr(DeseqStats, 'lfc_shrink', boom)
+    with pytest.warns(UserWarning, match="shrinkage skipped"):
+        out = compute_corr(*_args(data), TARGET, None, metrics=['Pearson'])
+    assert out.attrs['lfc_shrunk'] is False
+    assert out.attrs['fc_contrast'] == ('day30', 'day16')
+    assert out['log2FoldChange'].notna().sum() > N_GENES // 2     # unshrunk values are returned
 
 
 # ------------------------------------------------------------------ column alignment
@@ -411,20 +497,6 @@ def test_missing_target_raises_keyerror(data):
         compute_corr(*_args(data, design=False), 'Nope', None)
 
 
-# ------------------------------------------------------------------ fold change window
-def test_fc_window_before_differs_from_after_no_design(data):
-    kw = dict(metrics=['Pearson'])
-    after = compute_corr(*_args(data, design=False, annotation=False), TARGET, None, **kw)
-    before = compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
-                          fc_window='before', **kw)
-    a = after.set_index('Name')['log2FoldChange']
-    b = before.set_index('Name')['log2FoldChange'].reindex(a.index)
-    assert not np.allclose(a, b)
-    # the planted gene: day30 vs day50 (after) is a big drop, day30 vs day16 (before) a smaller one
-    assert a[TRUE_GENE] == pytest.approx(np.log2((700 + 1) / (150 + 1)), abs=0.4)
-    assert b[TRUE_GENE] == pytest.approx(np.log2((700 + 1) / (300 + 1)), abs=0.4)
-
-
 def test_pseudocount_reaches_no_repeat_fc(data):
     kw = dict(metrics=['Pearson'])
     a = compute_corr(*_args(data, design=False, annotation=False), TARGET, None,
@@ -442,23 +514,14 @@ def test_design_path_wiring_with_fake_fc(data, fake_fc):
         assert c in out.columns
     assert len(fake_fc) == 1
     counts, meta, kw = fake_fc[0]
-    # contrast = (peak group of the target, the group after it); passed on explicitly and via attrs
-    assert kw['contrast'] == ('day30', 'day50')
-    assert meta.attrs['contrast'] == ('day30', 'day50')
+    # contrast = (end, start) of the steepest rise of the target; passed on explicitly and via attrs
+    assert kw['contrast'] == ('day30', 'day16')
+    assert meta.attrs['contrast'] == ('day30', 'day16')
     assert kw['shrink'] is False and kw['n_cpus'] == 2
     # raw (unaggregated) replicate columns of the two groups
-    assert set(counts.columns) == {f'{g}_{r}' for g in ('day30', 'day50') for r in (1, 2, 3)}
-    # direction: the planted gene is up at the peak group
-    assert out.set_index('Name').loc[TRUE_GENE, 'log2FoldChange'] > 1.5
-
-
-def test_design_path_fc_window_before_with_fake_fc(data, fake_fc):
-    a = compute_corr(*_args(data), TARGET, None, metrics=['Pearson']).set_index('Name')
-    b = compute_corr(*_args(data), TARGET, None, metrics=['Pearson'],
-                     fc_window='before').set_index('Name')
-    assert fake_fc[0][2]['contrast'] == ('day30', 'day50')
-    assert fake_fc[1][2]['contrast'] == ('day30', 'day16')
-    assert not np.allclose(a['log2FoldChange'], b['log2FoldChange'].reindex(a.index))
+    assert set(counts.columns) == {f'{g}_{r}' for g in ('day30', 'day16') for r in (1, 2, 3)}
+    # direction: the planted gene is up from day16 to day30 (300 -> 700)
+    assert out.set_index('Name').loc[TRUE_GENE, 'log2FoldChange'] > 1.0
 
 
 def test_aggregation_default_is_mean_and_time_order_kept(data, fake_fc, monkeypatch):
@@ -568,7 +631,7 @@ def test_pipeline_with_design_real_deseq2(data, deseq_ok):
                    TARGET, None)
     assert res.index.name == 'Rank' and res.index[0] == 1
     assert _planted_rank(res) <= 0.25 * N_GENES
-    # direction of the DESeq2 fold change: planted gene is up at day30 vs day50
+    # direction of the DESeq2 fold change: planted gene is up from day16 to day30
     assert res.set_index('Name').loc[TRUE_GENE, 'log2FoldChange'] > 0
 
 

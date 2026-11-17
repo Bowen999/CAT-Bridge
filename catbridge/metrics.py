@@ -584,7 +584,7 @@ def compute_dtw(df, target, *, method='fastdtw'):
             (radius 1), the approximation used by CAT Bridge since 1.0, reproduced for all
             genes at once (the fastdtw package is not needed). ``'exact'`` -- the exact DTW
             distance that fastdtw approximates (always <= the fastdtw value). The two differ;
-            see the CHANGELOG (1.1.0, "Speed and input checks") for how much on the demo data.
+            see the CHANGELOG (2.0.0, "Speed and input checks") for how much on the demo data.
 
     Returns:
         DataFrame ``Name``, ``DTW``; one row per input gene in input order.
