@@ -1,5 +1,7 @@
 """Pre-processing: normalisation, scaling, replicate aggregation, merging, trend strength, PCA reduction."""
 
+import warnings
+
 import pandas as pd
 import numpy as np
 
@@ -38,27 +40,44 @@ def normalize(df, method):
 #  ************* Scaling ***************
 def scaling(df, method):
     """
-    Scale the data using the specified method.
+    Scale the data using the specified method and return the scaled data.
+
+    'min-max' scales each column to 0-1 (index and columns are preserved when
+    ``df`` is a DataFrame). 'pareto' is (x - mean) / sqrt(std) per column.
+    Any other method returns ``df`` unchanged (same as ``normalize``).
+    The input is never modified.
     """
     if method == 'min-max':
         scaler = MinMaxScaler()
-        df = scaler.fit_transform(df)
+        scaled = scaler.fit_transform(df)
+        if isinstance(df, pd.DataFrame):
+            df = pd.DataFrame(scaled, index=df.index, columns=df.columns)
+        else:
+            df = scaled
     elif method == 'pareto':
         df = (df - df.mean()) / np.sqrt(df.std())
+    return df
 
 
 def scale_df(df):
-    """Apply a log10 transformation and scale all values in a dataframe to the range 0-1."""
+    """Apply a log10 transformation and scale all values in a dataframe to the range 0-1.
+
+    Rows = genes, columns = time points. Missing values are forward-filled along the columns
+    (previous time point of the same gene); a missing first time point stays NaN, which
+    MinMaxScaler keeps as NaN.
+    """
     
     # Apply a log10 transformation, add a small constant to avoid log(0)
     df = np.log10(df + 1e-10)
     
     # Check for NaNs and fill or remove them before scaling
     if df.isnull().values.any():
-        df = df.fillna(method='ffill')  # you could also use 'bfill' or df.dropna()
+        # fill along the time axis (columns): a missing value takes the previous time point of the
+        # SAME gene. (axis=0 would copy the value of the previous gene.)
+        df = df.ffill(axis=1)
         
     scaler = MinMaxScaler()
-    df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+    df_scaled = pd.DataFrame(scaler.fit_transform(df), index=df.index, columns=df.columns)
     
     return df_scaled
 
@@ -87,7 +106,13 @@ def scale_column(df, column_name):
 def repeat_aggregation_max(df, design):
     """
     Aggregate biological replicates by taking the maximum value run for each row (gene/compound).
-    
+
+    For every row, the replicate (suffix ``_1``, ``_2``, ...) with the highest mean over all
+    time points is selected, and that replicate's values are used for every time point.
+    Output columns keep the order of first appearance in ``df`` (time order of the data file;
+    the row order of ``design`` is irrelevant) and are named by the group of ``<base>_1`` in
+    ``design``.
+
     Parameters:
         df (pandas DataFrame): The DataFrame to be aggregated.
         design (pandas DataFrame): The experimental design DataFrame.
@@ -100,36 +125,45 @@ def repeat_aggregation_max(df, design):
 
     # Extract base column names and maintain their order
     base_cols = [col.rsplit('_', 1)[0] for col in df.columns if '_' in col]
-    base_cols = sorted(set(base_cols), key=base_cols.index)
+    base_cols = list(dict.fromkeys(base_cols))
 
-    # Create sub DataFrames and store their means
-    mean_dfs = {}
+    # Mean of each replicate over all time points: rows x suffixes
+    suffixes = [str(i) for i in range(1, num_suffixes + 1)]
     sub_dfs = {}
-    for suffix in np.arange(1, num_suffixes + 1).astype(str):
+    mean_dfs = {}
+    for suffix in suffixes:
         sub_df = df.filter(regex=f'_{suffix}$')
         sub_dfs[suffix] = sub_df
         mean_dfs[suffix] = sub_df.mean(axis=1)
+    mean_mat = pd.DataFrame(mean_dfs, index=df.index).to_numpy(dtype=float)
 
-    # Create a DataFrame to store which sub DataFrame has the highest mean for each row
-    max_mean_df = pd.DataFrame(mean_dfs).idxmax(axis=1)
+    # Index of the replicate with the highest mean for each row (first one wins ties;
+    # rows without any valid mean fall back to the first suffix -> values stay NaN/as is)
+    best = np.argmax(np.where(np.isnan(mean_mat), -np.inf, mean_mat), axis=1)
 
-    # Create a new DataFrame, preserving the original index
-    new_df = pd.DataFrame(index=df.index)
-
-    # For each base column name
+    # Build the output column by column (vectorised over rows)
+    new_cols = {}
+    missing = []
     for base_col in base_cols:
-        for idx in new_df.index:
-            # Determine which sub DataFrame to pull from for this row
-            sub_df_idx = max_mean_df.loc[idx]
+        out = np.full(len(df.index), np.nan)
+        for k, suffix in enumerate(suffixes):
+            col = f"{base_col}_{suffix}"
+            if col not in df.columns:
+                if (best == k).any():
+                    missing.append(col)
+                continue
+            mask = best == k
+            out[mask] = pd.to_numeric(df[col], errors='coerce').to_numpy(dtype=float)[mask]
+        new_cols[base_col] = out
+    if missing:
+        warnings.warn(
+            f"repeat_aggregation_max: columns {missing} are missing from df; "
+            "the corresponding values are set to NaN.", UserWarning, stacklevel=2)
 
-            # Get value from the appropriate sub DataFrame
-            new_df.loc[idx, base_col] = sub_dfs[sub_df_idx].loc[idx, f"{base_col}_{sub_df_idx}"]
-
-
-    new_df.columns = [str(col) + '_1' for col in new_df]
+    new_df = pd.DataFrame(new_cols, index=df.index)
     mapping_dict = design['group'].to_dict()
-    new_df.columns = new_df.columns.map(lambda x: mapping_dict[x] if x in mapping_dict else x)
-    
+    new_df.columns = [mapping_dict.get(f"{c}_1", f"{c}_1") for c in new_df.columns]
+
     return new_df
 
 
@@ -137,22 +171,38 @@ def repeat_aggregation_max(df, design):
 def repeat_aggregation_mean(df: pd.DataFrame, design: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregate biological replicates by taking the mean value run for each row (gene/compound).
-    
+
+    The output columns are the groups in order of first appearance in the columns of ``df``.
+    The time order is that of the data file's columns -- the row order of ``design`` (which may
+    be sorted alphabetically by sample name) does not matter, and the groups are NOT sorted
+    alphabetically. Groups of ``design`` that have no column in ``df`` are dropped.
+    ``repeat_aggregation_max`` gives the same column order.
+
     Parameters:
         df (pandas DataFrame): The DataFrame to be aggregated.
-        design (pandas DataFrame): The experimental design DataFrame.
+        design (pandas DataFrame): The experimental design DataFrame (index = sample names,
+            column 'group').
         
     Returns:
         new_df (pandas DataFrame): The aggregated DataFrame.
-    """
-    # Generate new column names from design DataFrame
-    new_column_names = {i: design.loc[i]['group'] for i in df.columns}
 
-    # Rename columns and average by new column names
-    df_copy = df.rename(columns=new_column_names)
-    df_copy = df_copy.T.groupby(level=0).mean().T
-    
-    return df_copy
+    Raises:
+        KeyError: if a column of ``df`` is not a sample in ``design.index``.
+    """
+    missing = [c for c in df.columns if c not in design.index]
+    if missing:
+        raise KeyError(f"Columns of df not found in design.index: {missing}")
+
+    groups = design.loc[list(df.columns), 'group']
+    group_values = groups.to_numpy()
+
+    # Group order = order of first appearance in the DATA columns (time order of the data file)
+    order = list(pd.unique(group_values))
+
+    result = df.T.groupby(group_values, sort=False).mean().T
+    result = result.loc[:, order]
+    result.columns.name = None
+    return result
 
 
 # ************* Merge ***************

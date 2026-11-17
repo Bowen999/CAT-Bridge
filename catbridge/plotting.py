@@ -15,6 +15,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 
 from .preprocess import merge_dataframes
+from .scoring import METRIC_DIRECTION
 
 __all__ = [
     'plot_line',
@@ -535,6 +536,9 @@ def plot_result(result, score_column, log2FoldChange_column, Granger_column, sav
     if Granger_column not in result.columns or log2FoldChange_column not in result.columns or score_column not in result.columns:
         raise ValueError("One of the specified columns is missing from the DataFrame.")
 
+    # work on a copy: do not add helper columns to / modify the caller's DataFrame
+    result = result.copy()
+
     # Handle NaN or infinite values in 'log2FoldChange_column'
     result[log2FoldChange_column] = result[log2FoldChange_column].replace([np.inf, -np.inf], np.nan).fillna(0)
 
@@ -545,9 +549,24 @@ def plot_result(result, score_column, log2FoldChange_column, Granger_column, sav
     # Calculate size based on 'log2FoldChange', adjusting with the 'size_scale'
     result['size'] = np.abs(result['scaled_log2FoldChange']) * size_scale
 
-    # Normalize Granger_column values between 0 and 1 for color mapping
+    # Colour value = "evidence strength" (darker/higher colour = stronger evidence), following
+    # scoring.METRIC_DIRECTION:
+    #   'pvalue' (raw p, e.g. Granger): -log10(p)
+    #   'lower'  (a distance, e.g. DTW): -x  (smaller distance = stronger)
+    #   otherwise: the value itself
+    color_values = pd.to_numeric(result[Granger_column], errors='coerce').astype(float)
+    color_label = Granger_column
+    direction = METRIC_DIRECTION.get(str(Granger_column))
+    if direction == 'pvalue':
+        color_values = -np.log10(color_values.clip(lower=1e-300, upper=1.0))
+        color_label = f"-log10({Granger_column} p-value)"
+    elif direction == 'lower':
+        color_values = -color_values
+        color_label = f"-{Granger_column} (distance; higher = smaller distance = stronger)"
+
+    # Normalize the colour values between 0 and 1 for color mapping
     granger_norm = MinMaxScaler()
-    result['Granger_norm'] = granger_norm.fit_transform(result[Granger_column].values.reshape(-1, 1))
+    result['Granger_norm'] = granger_norm.fit_transform(color_values.fillna(color_values.min()).values.reshape(-1, 1))
 
     # Get color palette
     palette = sns.color_palette(color_palette, as_cmap=True)
@@ -566,7 +585,7 @@ def plot_result(result, score_column, log2FoldChange_column, Granger_column, sav
 
     # Create colorbar based on the normalized Granger_column values
     cbar = plt.colorbar(points, ax=ax)
-    cbar.set_label(Granger_column)
+    cbar.set_label(color_label)
 
     plt.xlabel(score_column)
     plt.ylabel("Index") # Assuming 'Index' is the desired y-axis label

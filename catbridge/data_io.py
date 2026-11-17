@@ -13,6 +13,8 @@ def read_upload(file_name):
     """
     Read the uploaded file and return a dataframe
     supported file format: csv, txt, tsv, xls, xlsx
+
+    Raises ValueError for any other extension.
     """
     #if the last 3 letters of the file name is csv, we use csv module to read it
     if file_name[-3:] == 'csv':
@@ -28,7 +30,10 @@ def read_upload(file_name):
     elif file_name[-4:] == 'xlsx':
         df = pd.read_excel(file_name, index_col=0)
     else:
-        print('File format is not supported')
+        raise ValueError(
+            f"Unsupported file format: '{file_name}'. "
+            "Supported extensions: csv, txt, tsv, xls, xlsx."
+        )
     return df
 
 
@@ -36,9 +41,9 @@ def read_upload(file_name):
 def get_target(name, df):
     """
     find the target compound in the dataframe and return the row of the target
+
+    Raises KeyError (with the target name in the message) if the target is not in df.index.
     """
     if name in df.index:
-        name = df.loc[name].tolist()
-    else:
-        print('Target is not in the index of the dataframe')
-    return name
+        return df.loc[name].tolist()
+    raise KeyError(f"Target '{name}' is not in the index of the dataframe.")

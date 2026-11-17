@@ -1,10 +1,14 @@
 """Similarity / causality metrics between each feature (row) and a target series, plus clustering."""
 
+import warnings
+
 import pandas as pd
 import numpy as np
 
 from statsmodels.tsa.stattools import grangercausalitytests
 from statsmodels.tsa.stattools import ccf
+from statsmodels.stats.multitest import multipletests
+from statsmodels.tools.sm_exceptions import InfeasibleTestError
 from causal_ccm.causal_ccm import ccm
 from sklearn.cross_decomposition import CCA
 from sklearn.preprocessing import MinMaxScaler
@@ -27,120 +31,164 @@ __all__ = [
 ]
 
 
+# ************* shared helpers **************************
+def _prepare(df, target):
+    """
+    Validate the inputs and return ``(names, X, y)``.
+
+    ``names`` is the list of row labels (input order), ``X`` a float ndarray of
+    shape (n_genes, n_timepoints) and ``y`` a float 1-D ndarray.  Neither ``df``
+    nor ``target`` is modified (``X`` / ``y`` are read-only views or copies).
+
+    Raises ValueError if ``len(target) != df.shape[1]``.
+    """
+    y = np.asarray(target, dtype=float)
+    if y.ndim != 1:
+        raise ValueError(f"target must be one-dimensional, got shape {y.shape}")
+    n_cols = df.shape[1]
+    if len(y) != n_cols:
+        raise ValueError(
+            f"Length of target ({len(y)}) does not match the number of "
+            f"time points / columns in df ({n_cols})."
+        )
+    X = df.to_numpy(dtype=float)
+    return list(df.index), X, y
+
+
+def _is_constant(v):
+    return np.ptp(v) == 0 or np.std(v) == 0
+
+
+def _bh_adjust(p):
+    """Benjamini-Hochberg adjusted p-values; NaN entries stay NaN."""
+    p = np.asarray(p, dtype=float)
+    padj = np.full(p.shape, np.nan)
+    ok = ~np.isnan(p)
+    if ok.any():
+        padj[ok] = multipletests(p[ok], method='fdr_bh')[1]
+    return padj
+
+
+def _check_positive_int(value, name):
+    if int(value) != value or value < 1:
+        raise ValueError(f"{name} must be a positive integer, got {value!r}")
+    return int(value)
+
+
+# Exceptions that statsmodels / numpy raise when a test is simply not computable
+# (too few observations, singular design, constant column).
+_GRANGER_EXPECTED_ERRORS = (ValueError, np.linalg.LinAlgError, InfeasibleTestError)
+
+
+def _granger_p(x_cause, y_effect, maxlag):
+    """
+    p-value of the ssr F-test for "x_cause Granger-causes y_effect" at lag
+    ``maxlag``.  NaN when the test cannot be run.
+    """
+    if (np.isnan(x_cause).any() or np.isnan(y_effect).any()
+            or _is_constant(x_cause) or _is_constant(y_effect)):
+        return np.nan
+    # statsmodels convention: the test asks whether column 2 helps predict column 1.
+    data = np.column_stack([y_effect, x_cause])
+    try:
+        with warnings.catch_warnings():
+            # `verbose` is deprecated in recent statsmodels, but required to keep
+            # older versions from printing.
+            warnings.filterwarnings('ignore', message='.*verbose.*', category=FutureWarning)
+            result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
+        return float(result[maxlag][0]['ssr_ftest'][1])
+    except _GRANGER_EXPECTED_ERRORS:
+        return np.nan
+
+
+def _granger_max_lag(n_obs):
+    """Largest ``maxlag`` that ``statsmodels.grangercausalitytests`` accepts for ``n_obs`` time
+    points (it requires ``n_obs > 3 * maxlag + 1`` with the constant term); 0 if none."""
+    return max((int(n_obs) - 2) // 3, 0)
+
+
+def _granger_table(df, target, maxlag, direction, col):
+    maxlag = _check_positive_int(maxlag, 'maxlag')
+    names, X, y = _prepare(df, target)
+    p = np.empty(len(names))
+    testable = np.zeros(len(names), dtype=bool)   # data would allow a test (not constant / NaN)
+    for i, row in enumerate(X):
+        if direction == 'forward':      # gene -> target
+            p[i] = _granger_p(row, y, maxlag)
+            cause, effect = row, y
+        else:                           # target -> gene
+            p[i] = _granger_p(y, row, maxlag)
+            cause, effect = y, row
+        testable[i] = not (np.isnan(cause).any() or np.isnan(effect).any()
+                           or _is_constant(cause) or _is_constant(effect))
+    if testable.any() and np.isnan(p[testable]).all():
+        max_lag = _granger_max_lag(len(y))
+        warnings.warn(
+            f"{col}: the test could not be computed for any gene: {len(y)} time points with "
+            f"maxlag={maxlag}. statsmodels needs more than 3*maxlag+1 observations, so the largest "
+            f"usable lag is {max_lag}"
+            + (" (no lag is possible with this few time points)" if max_lag == 0 else "")
+            + ". Returning NaN for all genes.",
+            UserWarning, stacklevel=3,
+        )
+    return pd.DataFrame({'Name': names, col: p, col + '_padj': _bh_adjust(p)})
+
+
 # ************* 2.1 Granger **************************
 def compute_granger(df, target, maxlag=1):
     """
-    Compute the Granger causality score for each row in the dataframe.
-    The X is each row in the dataframe and the Y is the target list.
-    The returd value is the p-value of the F test for the maximum lag.
-    
+    Granger causality of each gene (row of ``df``) on the target: gene -> target.
+
     Parameters:
-        df (pandas DataFrame): The DataFrame to be aggregated.
-        target (list): The target list.
-    
+        df (pandas DataFrame): rows = genes, columns = time points (in order).
+        target (list / ndarray / Series): target series, same length as df.columns.
+        maxlag (int): lag used for the test (the p-value at exactly this lag is reported).
+
     Returns:
-        index_list (list): The list of row indices.
-    
+        DataFrame with columns ``Name``, ``Granger``, ``Granger_padj`` -- one row
+        per input gene, in input order.  ``Granger`` is the raw p-value (0..1,
+        small = the gene helps predict the target) of the ssr F-test at lag
+        ``maxlag``; ``Granger_padj`` is the Benjamini-Hochberg adjusted value over
+        all non-NaN p-values.  NaN where the test cannot be run (constant series,
+        NaN in the data, too few time points).
+
+    Raises:
+        ValueError: if ``len(target) != df.shape[1]`` or ``maxlag`` is not a positive integer.
     """
-    # Initialize lists to store results
-    index_list = []
-    p_value_list = []
-
-    # Loop through each row in the dataframe
-    for idx, row in df.iterrows():
-        # Skip if the row or the target list has constant values
-        if np.std(row.values) == 0 or np.std(target) == 0:
-            continue
-
-        # Combine the row and target into a DataFrame
-        data = pd.concat([pd.Series(target), pd.Series(row.values)], axis=1)
-
-        # Perform the Granger causality test
-        try:
-            result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
-
-            # Extract the p-value of the F test for the maximum lag
-            p_value = result[maxlag][0]['ssr_ftest'][1]
-            # p_value = 1-p_value
-
-            # Append results to the lists
-            index_list.append(idx)
-            p_value_list.append(p_value)
-        except Exception as e:
-            #add NA if there is an error
-            index_list.append(idx)
-            p_value_list.append(np.nan)
-            
-            # print(f"Error at index {idx}: {str(e)}")
-
-    # Create a new dataframe to store results
-    results_df = pd.DataFrame({
-        'Name': index_list,
-        'Granger': p_value_list
-    })
-
-    return results_df
+    return _granger_table(df, target, maxlag, 'forward', 'Granger')
 
 
 def compute_reverse_granger(df, target, maxlag=1):
     """
-    X is target and Y is each row in the dataframe (df).
+    Reverse-direction Granger causality: target -> gene.
+
+    Same inputs / output conventions as :func:`compute_granger`, but the columns
+    are ``Name``, ``Granger_reverse`` (raw p-value, NOT 1 - p) and
+    ``Granger_reverse_padj``.
     """
-    
-     # Initialize lists to store results
-    index_list = []
-    p_value_list = []
-
-    # Loop through each row in the dataframe
-    for idx, row in df.iterrows():
-        # Skip if the row or the target list has constant values
-        if np.std(row.values) == 0 or np.std(target) == 0:
-            continue
-
-        # Combine the row and target into a DataFrame
-        data = pd.concat([pd.Series(row.values), pd.Series(target)], axis=1)
-
-        # Perform the Granger causality test
-        try:
-            result = grangercausalitytests(data, maxlag=maxlag, verbose=False)
-
-            # Extract the p-value of the F test for the maximum lag
-            p_value = result[maxlag][0]['ssr_ftest'][1]
-            p_value = 1-p_value
-
-            # Append results to the lists
-            index_list.append(idx)
-            p_value_list.append(p_value)
-        except Exception as e:
-            #add NA if there is an error
-            index_list.append(idx)
-            p_value_list.append(np.nan)
-            
-            # print(f"Error at index {idx}: {str(e)}")
-
-    # Create a new dataframe to store results
-    results_df = pd.DataFrame({
-        'Name': index_list,
-        'Granger': p_value_list
-    })
-
-    return results_df
+    return _granger_table(df, target, maxlag, 'reverse', 'Granger_reverse')
 
 
 def granger_list(A, B, maxlag):
     """
-    Compute granger test P value for listA (X), and listB (y) 
+    Compute the Granger test p-value (ssr F-test) for every lag 1..maxlag.
+
+    Following the statsmodels convention, the test asks whether ``B`` Granger-causes
+    ``A`` (``A`` is the predicted series, ``B`` the candidate cause).
+
+    Returns:
+        dict {lag: p-value}.
     """
     
     # Combine the two lists into a 2D array
     data = np.column_stack((A, B))
     
     # Perform the Granger causality test and return the result
-    result = grangercausalitytests(data, maxlag, verbose=False)
-    #result = grangercausalitytests(data, maxlag)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*verbose.*', category=FutureWarning)
+        result = grangercausalitytests(data, maxlag, verbose=False)
 
     # In this function, we'll return just the p-value for each lag.
-    # You may want to modify this to return other information.
     p_values = {lag: result[lag][0]['ssr_ftest'][1] for lag in result.keys()}
     
     return p_values
@@ -148,180 +196,193 @@ def granger_list(A, B, maxlag):
 
 # ****************** 2.2 CCM (Convergent cross mapping)*******************************
 def compute_ccm(df, target, E=3, tau=1):
-    # Placeholder for result list
-    results = [] 
+    """
+    Convergent cross mapping between each gene (X) and the target (Y), using
+    ``causal_ccm.ccm(gene, target, tau, E).causality()``.
 
-    for name, data in df.iterrows():
-        # Get data from the row (as the name is now the index)
-        data_values = data.values
-        
-        if np.any(np.isnan(data_values)) or np.any(np.isnan(target)):
-            print("data_values:", data_values)
-            print("target:", target)
-            continue  # Skip the current iteration if NaN is found
+    Returns:
+        DataFrame ``Name``, ``CCM`` (correlation r), ``CCM_p`` (its p-value); one
+        row per input gene in input order (not sorted).  Rows containing NaN give NaN.
 
+    If the embedded series is too short -- ``N - (E-1)*tau < E + 2`` points -- CCM
+    is undefined (the nearest-neighbour search needs E+2 points); all rows are
+    NaN and a UserWarning is emitted instead of raising.
+    """
+    E = _check_positive_int(E, 'E')
+    tau = _check_positive_int(tau, 'tau')
+    names, X, y = _prepare(df, target)
+    n = len(y)
+    r = np.full(len(names), np.nan)
+    p = np.full(len(names), np.nan)
 
-        # Calculate ccm
-        ccm1 = ccm(data_values, target, tau, E)
-        
-        # Get causality value
-        causality_val = ccm1.causality()[0]
-        
-        # Append to results list
-        results.append([name, causality_val])
+    n_embedded = n - (E - 1) * tau
+    if n_embedded < E + 2:
+        warnings.warn(
+            f"CCM skipped: {n} time points with E={E}, tau={tau} give only "
+            f"{n_embedded} embedded points, but at least E+2={E + 2} are needed. "
+            "Returning NaN for all genes.",
+            UserWarning, stacklevel=2,
+        )
+    elif not np.isnan(y).any():
+        for i, row in enumerate(X):
+            if np.isnan(row).any():
+                continue
+            with warnings.catch_warnings():
+                # constant predictions make pearsonr warn and return NaN
+                warnings.simplefilter('ignore')
+                r[i], p[i] = ccm(row, y, tau, E).causality()
 
-    # Convert results list to DataFrame
-    result_df = pd.DataFrame(results, columns=['Name', 'CCM'])
-    
-    # Sort by Causality in descending order and reset the index
-    result_df = result_df.sort_values(by='CCM', ascending=False).reset_index(drop=True)
-    
-    return result_df
+    return pd.DataFrame({'Name': names, 'CCM': r, 'CCM_p': p})
 
 
 # ******************** 2.3 CCA (Canonical correlation) ********************
 def compute_cca(df, target, n_components=1):
-    # Ensure the target data is 2D (samples x features)
-    metabolite_concentration = np.array(target).reshape(-1, 1)
-    results_dict = {"Name": [], "CCA": []}  # Initialize a dictionary to store the results
+    """
+    Canonical correlation between each gene and the target.
 
-    for index, row in df.iterrows():
-        # Reshape the gene_expression data to be 2D (samples x features)
-        gene_expression = np.array(row).reshape(-1, 1)
+    Note: with one gene (1 feature) against one metabolite (1 feature), CCA
+    degenerates to the absolute Pearson correlation |r|; the sign is lost
+    (values are in [0, 1]).  Use ``compute_pearson`` for a signed value.
 
-        # It's essential to have more than one sample to perform CCA,
-        # so if there's only one sample, append NaN and continue
-        if gene_expression.shape[0] <= 1 or metabolite_concentration.shape[0] <= 1:
-            results_dict["Name"].append(index)
-            results_dict["CCA"].append(np.nan)
-            continue
+    Parameters:
+        n_components (int): must be 1. One gene against one metabolite has only one canonical
+            component; anything else raises ValueError (it used to give an all-NaN column
+            without any message).
 
-        try:
-            # Instantiate CCA
-            cca = CCA(n_components=n_components)
+    Returns:
+        DataFrame ``Name``, ``CCA``; one row per input gene in input order.
+        NaN for constant series (of the gene or the target) and for NaN in the data.
+
+    Raises:
+        ValueError: ``n_components != 1`` or ``len(target) != df.shape[1]``.
+    """
+    if isinstance(n_components, bool) or n_components != 1:
+        raise ValueError(
+            f"n_components must be 1, got {n_components!r}: CCA between a single gene and a "
+            "single metabolite has only one canonical component.")
+    names, X, y = _prepare(df, target)
+    metabolite_concentration = y.reshape(-1, 1)
+    out = np.full(len(names), np.nan)
+
+    # It's essential to have more than one sample to perform CCA; a constant or NaN-containing
+    # target / gene carries no information (same convention as the other metrics: NaN)
+    if len(y) > 1 and not (np.isnan(y).any() or _is_constant(y)):
+        for i, row in enumerate(X):
+            if np.isnan(row).any() or _is_constant(row):
+                continue
+            gene_expression = row.reshape(-1, 1)
+            cca = CCA(n_components=1)
             cca.fit(gene_expression, metabolite_concentration)
-
-            # Transform the data based on the canonical correlation vectors
             gene_c, metabolite_c = cca.transform(gene_expression, metabolite_concentration)
+            with np.errstate(invalid='ignore', divide='ignore'):
+                out[i] = np.corrcoef(gene_c.T, metabolite_c.T)[0, 1]
 
-            # Compute the correlation between the transformed data
-            correlation = np.corrcoef(gene_c.T, metabolite_c.T)[0, 1]
-            results_dict["Name"].append(index)
-            results_dict["CCA"].append(correlation)
-
-        except ValueError as e:
-            results_dict["Name"].append(index)
-            results_dict["CCA"].append(np.nan)  # Append NaN for rows causing errors
-
-    return pd.DataFrame(results_dict)  # Convert the results dictionary to a DataFrame and return it
+    return pd.DataFrame({'Name': names, 'CCA': out})
 
 
 # ******************* 2.4 DTW (Dynamic Time Warping) *************************
 def compute_dtw(df, target):
-    results_dict = {"Name": [], "DTW": []}  # Initialize a dictionary to store the results
-    
-    # Prepare the MinMax scaler
+    """
+    Dynamic time warping *distance* between each (min-max scaled) gene series and
+    the (min-max scaled) target.  Direction: smaller = more similar (0 = identical).
+
+    Returns:
+        DataFrame ``Name``, ``DTW``; one row per input gene in input order.
+        Rows / target containing NaN give NaN. A constant gene series gives NaN (min-max
+        scaling would turn it into all zeros and give a finite, "good-looking" distance although
+        it carries no information); a constant target gives NaN for all genes.
+    """
+    names, X, y = _prepare(df, target)
+    out = np.full(len(names), np.nan)
     scaler = MinMaxScaler()
-    
-    for index, row in df.iterrows():
-        # Convert the row data and target to numpy arrays
-        array1, array2 = np.array(row).reshape(-1, 1), np.array(target).reshape(-1, 1)
-        
-        # Normalize the arrays
-        array1_norm = scaler.fit_transform(array1)
-        array2_norm = scaler.fit_transform(array2)
-        
-        # Compute the DTW distance using the fastdtw function
-        distance, path = fastdtw(array1_norm, array2_norm)
-        
-        # Append the index and DTW distance to the results dictionary
-        results_dict["Name"].append(index)
-        results_dict["DTW"].append(distance)
-    
-    return pd.DataFrame(results_dict)  # Convert the results dictionary to a DataFrame and return it
+
+    if not (np.isnan(y).any() or _is_constant(y)):
+        array2_norm = scaler.fit_transform(y.reshape(-1, 1))
+        for i, row in enumerate(X):
+            if np.isnan(row).any() or _is_constant(row):
+                continue
+            array1_norm = scaler.fit_transform(row.reshape(-1, 1))
+            distance, _path = fastdtw(array1_norm, array2_norm)
+            out[i] = distance
+
+    return pd.DataFrame({'Name': names, 'DTW': out})
 
 
 # ************************* 2.5 CCF *****************************
 def compute_ccf(df, target, lag=1):
-    results_dict = {"Name": [], "CCF": []}  # Initialize a dictionary to store the results
+    """
+    Cross-correlation  CCF = corr(gene[t], target[t + lag]).
 
-    for index, row in df.iterrows():
-        gene_expression = np.array(row)
+    * lag > 0: the gene LEADS the metabolite by ``lag`` steps (the direction CAT
+      Bridge looks for);
+    * lag < 0: the metabolite leads the gene by ``|lag|`` steps;
+    * lag = 0: contemporaneous correlation.
 
-        # Ensure gene_expression and target have equal lengths, or handle it accordingly
-        # One simple method could be truncating the longer array, but other methods might be more suitable depending on the context
-        min_length = min(len(gene_expression), len(target))
-        gene_expression = gene_expression[:min_length]
-        truncated_target = np.array(target)[:min_length]
+    Uses ``statsmodels.tsa.stattools.ccf`` (``ccf(a, b)[k] = corr(a[t+k], b[t])``,
+    global mean/std, ``adjusted=True``), so ``lag >= 0`` is ``ccf(target, gene)[lag]``
+    and ``lag < 0`` is ``ccf(gene, target)[-lag]``.
 
-        # Compute the cross-correlation function
-        cross_correlation = ccf(gene_expression, truncated_target)
+    Returns:
+        DataFrame ``Name``, ``CCF``; one row per input gene in input order.
+        NaN for constant series, NaN in the data, or ``|lag|`` beyond the series length.
+    """
+    if int(lag) != lag:
+        raise ValueError(f"lag must be an integer, got {lag!r}")
+    lag = int(lag)
+    names, X, y = _prepare(df, target)
+    out = np.full(len(names), np.nan)
 
-        # Extract the cross-correlation at the specified lag
-        # Handling the case where the specified lag is out of bounds by appending NaN
-        if abs(lag) >= len(cross_correlation):
-            results_dict["Name"].append(index)
-            results_dict["CCF"].append(np.nan)
-        else:
-            lag_value = cross_correlation[lag] if lag >= 0 else cross_correlation[lag - 1]
-            results_dict["Name"].append(index)
-            results_dict["CCF"].append(lag_value)
+    if not (np.isnan(y).any() or _is_constant(y)):
+        for i, row in enumerate(X):
+            if np.isnan(row).any() or _is_constant(row):
+                continue
+            if lag >= 0:
+                cc = ccf(y, row)
+                k = lag
+            else:
+                cc = ccf(row, y)
+                k = -lag
+            if k < len(cc):
+                out[i] = cc[k]
 
-    return pd.DataFrame(results_dict)  # Convert the results dictionary to a DataFrame and return it
+    return pd.DataFrame({'Name': names, 'CCF': out})
 
 
-# ***************** 2.6 Spearman *********************
+# ***************** 2.6 Spearman / 2.7 Pearson *********************
+def _corr_table(df, target, func, col):
+    names, X, y = _prepare(df, target)
+    r = np.full(len(names), np.nan)
+    p = np.full(len(names), np.nan)
+    if len(y) >= 2 and not (np.isnan(y).any() or _is_constant(y)):
+        for i, row in enumerate(X):
+            if np.isnan(row).any() or _is_constant(row):
+                continue
+            r[i], p[i] = func(row, y)
+    return pd.DataFrame({'Name': names, col: r, col + '_p': p, col + '_padj': _bh_adjust(p)})
+
+
 def compute_spearman(df, target):
-    # Initialize lists to store results
-    index_list = []
-    corr_list = []
-    p_value_list = []
+    """
+    Spearman rank correlation of each gene with the target (sign kept).
 
-    # Loop through each row in the dataframe
-    for idx, row in df.iterrows():
-        # Compute Spearman correlation and p-value
-        corr, p_value = spearmanr(row, target)
-
-        # Append results to the lists
-        index_list.append(idx)
-        corr_list.append(corr)
-        p_value_list.append(p_value)
-
-    # Create a new dataframe to store results
-    results_df = pd.DataFrame({
-        'Name': index_list,
-        'Spearman': corr_list
-        #'P-value': p_value_list
-    })
-
-    return results_df
+    Returns:
+        DataFrame ``Name``, ``Spearman``, ``Spearman_p``, ``Spearman_padj``
+        (Benjamini-Hochberg over non-NaN p); one row per gene in input order.
+        Constant series / NaN in the data give NaN.
+    """
+    return _corr_table(df, target, spearmanr, 'Spearman')
 
 
-# ***************** 2.7 Pearson *********************
 def compute_pearson(df, target):
-    # Initialize lists to store results
-    index_list = []
-    corr_list = []
-    p_value_list = []
+    """
+    Pearson correlation of each gene with the target (sign kept).
 
-    # Loop through each row in the dataframe
-    for idx, row in df.iterrows():
-        # Compute Pearson correlation and p-value
-        corr, p_value = pearsonr(row, target)
-
-        # Append results to the lists
-        index_list.append(idx)
-        corr_list.append(corr)
-        p_value_list.append(p_value)
-
-    # Create a new dataframe to store results
-    results_df = pd.DataFrame({
-        'Name': index_list,
-        'Pearson': corr_list
-        #'P-value': p_value_list
-    })
-
-    return results_df
+    Returns:
+        DataFrame ``Name``, ``Pearson``, ``Pearson_p``, ``Pearson_padj``
+        (Benjamini-Hochberg over non-NaN p); one row per gene in input order.
+        Constant series / NaN in the data give NaN.
+    """
+    return _corr_table(df, target, pearsonr, 'Pearson')
 
 
 # ************** fuzz c mean clustering *********************
@@ -345,13 +406,18 @@ def clustering(df, n_clusters):
 
 
 # ts Clustering
-def ts_clustering(df, n_clusters):
+def ts_clustering(df, n_clusters, random_state=0, max_iter=5):
     """
     Cluster the time series data in the input dataframe using the TS-KMeans algorithm.
     
     Parameters:
         df (pandas.DataFrame): The input dataframe.
         n_clusters (int): The number of clusters to create.
+        random_state (int): Seed for TimeSeriesKMeans (reproducible results). Default 0.
+        max_iter (int): Maximum k-means iterations. Default 5.
+
+    Returns:
+        pandas.Series named 'Cluster', indexed like ``df.index`` (the input is not modified).
     """
     from tslearn.clustering import TimeSeriesKMeans  # lazy import (heavy optional dependency)
     from tslearn.preprocessing import TimeSeriesScalerMeanVariance
@@ -364,7 +430,7 @@ def ts_clustering(df, n_clusters):
     data_scaled = scaler.fit_transform(data)
 
     # Create the KMeans model
-    km = TimeSeriesKMeans(n_clusters=n_clusters, metric="euclidean", max_iter=5, random_state=0)
+    km = TimeSeriesKMeans(n_clusters=n_clusters, metric="euclidean", max_iter=max_iter, random_state=random_state)
 
     # Fit the model to the data
     km.fit(data_scaled)
@@ -372,8 +438,5 @@ def ts_clustering(df, n_clusters):
     # Get the cluster labels for each time series
     labels = km.labels_
 
-    # Add the labels as a new column in the original DataFrame
-    df['Cluster'] = labels
-    df = df['Cluster']
-
-    return df
+    # Return the labels as a Series named 'Cluster' (the input df is left untouched)
+    return pd.Series(labels, index=df.index, name='Cluster')

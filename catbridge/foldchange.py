@@ -1,11 +1,13 @@
 """Fold-change computation: noontide detection, no-replicate FC, DESeq2-based FC."""
 
-import math
+import inspect
+import warnings
 
 import pandas as pd
 import numpy as np
 
 from .data_io import read_upload
+from .preprocess import repeat_aggregation_mean
 
 __all__ = [
     'find_noontide',
@@ -17,51 +19,83 @@ __all__ = [
 
 
 # ********* Noontide ************
-def find_noontide(df, row_name):
+def find_noontide(df, row_name, window='after', offset=1):
     """
-    Find the column with the highest value in the row, and return the column, and the column after it (name).
-    If the column with the highest value is the last column, then return the column with the second highest value, and the column after it (name).
-    
+    Find the peak ("noontide") column of a row and the column it is compared with.
+
+    The peak column is the column with the highest value in ``df.loc[row_name]``.
+    The comparison column lies ``offset`` columns after (``window='after'``, default, the
+    behaviour of CAT Bridge 1.0) or before (``window='before'``) the peak column.
+    The peak column is always returned first.
+
+    If the comparison column would fall outside the table (e.g. ``window='after'`` and the peak
+    is in the last column) the other side is used (same ``offset``) and a warning is issued;
+    if neither side has such a column a ValueError is raised.  (The old "use the second
+    highest column instead" fallback was removed: it compared time points unrelated to the peak.)
+
+    Reproducing the column choice of the case-study version of ``find_noontide`` (the one that
+    returns the peak and the column two positions before it, "-3 position" in its docstring):
+    use ``window='before', offset=2``.  That version additionally falls back to the 2nd/3rd
+    highest column when the peak is in the first two columns; that fallback cannot be
+    expressed here (we fall back to the other side of the *same* peak instead).
+
     Parameters:
-        df (pandas DataFrame): The DataFrame has been aggregated.
+        df (pandas DataFrame): The DataFrame has been aggregated (columns in time order).
         row_name (str): The name of the row to be detected.
-        
+        window (str): 'after' or 'before'.
+        offset (int): Distance (in columns) between the peak column and the comparison column, >= 1.
+
     Returns:
-        column_n (str): The name of the column with the highest value.
+        pandas.Index: ``[peak_column, comparison_column]``.
+
+    Raises:
+        KeyError: ``row_name`` is not in ``df.index``.
+        ValueError: bad ``window``/``offset``, the row has no numeric value, or no comparison
+            column exists on either side.
     """
-    # Get the row with the specified name
-    row = df.loc[row_name].copy()
+    if window not in ('after', 'before'):
+        raise ValueError(f"window must be 'after' or 'before', got {window!r}.")
+    if isinstance(offset, bool) or not isinstance(offset, (int, np.integer)) or offset < 1:
+        raise ValueError(f"offset must be an integer >= 1, got {offset!r}.")
+
+    if row_name not in df.index:
+        raise KeyError(f"Row '{row_name}' is not in the index of the dataframe.")
+    row = df.loc[row_name]
+    if isinstance(row, pd.DataFrame):
+        raise ValueError(f"Row name '{row_name}' is not unique in the index.")
 
     # Convert to numeric and handle errors by replacing non-numeric values with NaN
-    row = pd.to_numeric(row, errors='coerce')
+    values = pd.to_numeric(row, errors='coerce').to_numpy(dtype=float)
+    if np.isnan(values).all():
+        raise ValueError(f"The row '{row_name}' contains only non-numeric or missing values.")
 
-    # Handle rows that are all NaN
-    if row.isna().all():
-        raise Exception(f"The row '{row_name}' contains only non-numeric or missing values.")
+    n = len(values)
+    peak = int(np.nanargmax(values))
+    step = offset if window == 'after' else -offset
 
-    # Identify the column with the highest value
-    column_n = row.idxmax()
-    col_idx = list(df.columns).index(column_n)
+    other = peak + step
+    if not 0 <= other < n:
+        alt = peak - step
+        side = 'after' if step > 0 else 'before'
+        alt_side = 'before' if step > 0 else 'after'
+        if not 0 <= alt < n:
+            raise ValueError(
+                f"The peak of '{row_name}' is in column '{df.columns[peak]}' (position {peak} of {n}); "
+                f"there is no column {offset} position(s) after or before it."
+            )
+        warnings.warn(
+            f"The peak of '{row_name}' is in column '{df.columns[peak]}' (position {peak} of {n}), "
+            f"so there is no column {offset} position(s) {side} it; using the column {offset} "
+            f"position(s) {alt_side} it instead ('{df.columns[alt]}').",
+            UserWarning, stacklevel=2,
+        )
+        other = alt
 
-    # If column with max value is last column, then find the second highest column
-    if col_idx == len(df.columns) - 1:
-        row[column_n] = np.nan # set value in column_n to NaN
-        column_n = row.idxmax() # get column with max value now
-
-    # Find column after column_n
-    col_idx = list(df.columns).index(column_n)
-    if col_idx < len(df.columns) - 1: # Make sure it's not the last column
-        column_n_plus_1 = df.columns[col_idx + 1]
-    else:
-        raise Exception("There is no column after the column with the maximum value.")
-
-    # Keep only column n and column n+1
-    df_filtered = df[[column_n, column_n_plus_1]]
-
-    return df_filtered.columns
+    return df.columns[[peak, other]]
 
 
-def df_for_fc(df1, target, df2, design):
+# ********* df for fc ************
+def df_for_fc(df1, target, df2, design, window='after', offset=1):
     """
     Generate the design matrix and matrix for computing the FC score.
     
@@ -70,115 +104,346 @@ def df_for_fc(df1, target, df2, design):
         target (str): The name of the row to be detected (Capsaicin).
         df2 (pandas DataFrame): The DataFrame for fc computing (gene).
         design (pandas DataFrame): study design, the sample and group information.
+        window, offset: see ``find_noontide``.
     
     Returns:
-        volcano_df (pandas DataFrame): Modified matrix for computing FC score.
-        volcano_design (pandas DataFrame): Modified design matrix.
+        volcano_df (pandas DataFrame): Modified matrix for computing FC score (a copy).
+        volcano_design (pandas DataFrame): Modified design matrix (a copy; rows in the order of
+            the columns of ``df2``). Its
+            ``attrs['contrast']`` is ``(peak_group, comparison_group)``; ``fc_comp`` uses it so
+            that log2FoldChange = log2(peak / comparison).
     """
-    noontide = find_noontide(df1, target)
-    volcano_design = design[design['group'].isin(noontide)]
-    volcano_df = df2[volcano_design.index]
+    noontide = find_noontide(df1, target, window=window, offset=offset)
+    peak_group, other_group = noontide[0], noontide[1]
+
+    volcano_design = design[design['group'].isin(noontide)].copy()
+    # samples in the order of the data columns (time order), not the row order of design
+    not_in_data = [c for c in volcano_design.index if c not in df2.columns]
+    if not_in_data:
+        raise KeyError(f"Samples of design not found in the columns of the gene table: {not_in_data}")
+    volcano_design = volcano_design.loc[[c for c in df2.columns if c in volcano_design.index]]
+    present = set(volcano_design['group'])
+    absent = [g for g in (peak_group, other_group) if g not in present]
+    if absent:
+        raise ValueError(f"Group(s) {absent} found by find_noontide are not in design['group'].")
+
+    volcano_df = df2[list(volcano_design.index)].copy()
+    volcano_design.attrs = {'contrast': (peak_group, other_group)}
 
     return volcano_df, volcano_design
 
 
-def no_repeat_fc(df, noontide):
+def no_repeat_fc(df, noontide, pseudocount=1.0):
     """
-    Compute the FC score for each metabolite. This function is used for Study Design that has no biological repeats.
+    Compute the FC score for each gene. This function is used for Study Design that has no biological repeats.
+
+    log2FoldChange = log2((peak + pseudocount) / (comparison + pseudocount)).
+    A pseudocount keeps zero expression finite (0 vs 0 gives 0). NaN in either column gives NaN.
     
     Parameters:
         df (pandas DataFrame): The DataFrame for fc computing (gene).
-        noontide (list): The list of the column names of the noontide samples. (can be obtained from find_noontide function)
+        noontide (list): The two column names ``[peak, comparison]`` (from find_noontide).
+        pseudocount (float): Added to both columns before the ratio; must be > 0.
     
     Returns:
-        new_df (pandas DataFrame): A new DataFrame with the FC score.
+        new_df (pandas DataFrame): index = genes (named 'Name'), single column 'log2FoldChange'.
+        The input is not modified.
+
+    Raises:
+        ValueError: pseudocount <= 0, or negative values in the two columns.
     """
-    
-    # Create a new DataFrame as a copy of the original
-    new_df = df.copy()
-    
-    # Compute log2FoldChange
-    new_df['log2FoldChange'] = new_df[noontide[0]] / new_df[noontide[1]]
-    new_df['log2FoldChange'] = new_df['log2FoldChange'].apply(lambda x: math.log2(x if x > 0 else np.finfo(float).eps))
-    
-    # Replace infinities with 0
-    new_df.replace([np.inf, -np.inf], 0, inplace=True)
-    
-    # Replace NaNs with 0
-    new_df['log2FoldChange'].fillna(0, inplace=True)
-    
-    # Make the range of log2FoldChange from 0-1
-    # scaler = MinMaxScaler()
-    # new_df['log2FoldChange'] = scaler.fit_transform(new_df[['log2FoldChange']])
-    
-    # Keep only the 'log2FoldChange' column in the new DataFrame
-    new_df = new_df[['log2FoldChange']]
-    
+    if not np.isfinite(pseudocount) or pseudocount <= 0:
+        raise ValueError(f"pseudocount must be a positive finite number, got {pseudocount!r}.")
+
+    peak = pd.to_numeric(df[noontide[0]], errors='coerce').astype(float)
+    other = pd.to_numeric(df[noontide[1]], errors='coerce').astype(float)
+    if (peak < 0).any() or (other < 0).any():
+        raise ValueError("Negative values found in the columns used for fold change; "
+                         "expression values must be >= 0.")
+
+    lfc = np.log2((peak + pseudocount) / (other + pseudocount))
+
+    new_df = pd.DataFrame({'log2FoldChange': lfc.to_numpy()}, index=df.index.copy())
+    new_df.index.name = 'Name'
     return new_df
 
 
-def fc_comp(counts_df, metadata):
+def _resolve_contrast(contrast, metadata, sample_order=None):
+    """Return (peak, comparison). Without a contrast, the first two groups in order of
+    appearance are used; "order" is the order of ``sample_order`` (the columns of the count
+    table = the time order of the data file), not the row order of ``metadata``."""
+    if sample_order is not None and all(c in metadata.index for c in sample_order):
+        groups_in_order = list(pd.unique(metadata.loc[list(sample_order), 'group']))
+    else:
+        groups_in_order = list(pd.unique(metadata['group']))
+    if contrast is None:
+        contrast = metadata.attrs.get('contrast') if hasattr(metadata, 'attrs') else None
+    if contrast is None:
+        if len(groups_in_order) < 2:
+            raise ValueError("metadata['group'] needs at least two groups to compute a fold change.")
+        contrast = (groups_in_order[0], groups_in_order[1])
+        warnings.warn(
+            f"No contrast given; using the first two groups in order of appearance in the "
+            f"data columns: "
+            f"log2({contrast[0]} / {contrast[1]}).", UserWarning, stacklevel=3)
+    contrast = tuple(contrast)
+    if len(contrast) != 2 or contrast[0] == contrast[1]:
+        raise ValueError(f"contrast must be two different group names (peak, comparison), got {contrast!r}.")
+    missing = [g for g in contrast if g not in groups_in_order]
+    if missing:
+        raise ValueError(f"contrast group(s) {missing} not found in metadata['group'] {groups_in_order}.")
+    return contrast
+
+
+def _accepts(callable_, name):
+    try:
+        return name in inspect.signature(callable_).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _get_size_factors(dds, samples):
+    """DESeq2 size factors (median-of-ratios) of ``dds`` as an array in the order of ``samples``,
+    or None if they cannot be found.  pydeseq2 >= 0.5 keeps them in ``dds.obs['size_factors']``,
+    0.4.x in ``dds.obsm['size_factors']``."""
+    for attr in ('obs', 'obsm'):
+        try:
+            sf = getattr(dds, attr)['size_factors']
+        except Exception:
+            continue
+        try:
+            if isinstance(sf, (pd.Series, pd.DataFrame)):
+                sf = sf.squeeze(axis=1) if isinstance(sf, pd.DataFrame) else sf
+                if isinstance(sf, pd.Series) and set(samples) <= set(sf.index):
+                    sf = sf.loc[list(samples)]
+            sf = np.asarray(sf, dtype=float).reshape(-1)
+        except Exception:
+            continue
+        if len(sf) == len(samples) and np.all(np.isfinite(sf)) and np.all(sf > 0):
+            return sf
+    return None
+
+
+def _direction_agrees(counts, is_peak, lfc, size_factors, min_abs=1.0, min_mean=10.0):
+    """Fraction of clear-cut genes whose estimated LFC sign matches the raw group-mean ratio.
+
+    counts: samples x genes (ints); is_peak: boolean array over samples; lfc: Series (genes);
+    size_factors: the DESeq2 (median-of-ratios) size factors, one per sample. They are used
+    instead of total counts, which are misleading when a few genes take a large share of the
+    library (composition bias). Returns None if size_factors is None or there are fewer than
+    5 clear-cut genes."""
+    if size_factors is None:
+        return None
+    c = counts.to_numpy(dtype=float)
+    size = np.asarray(size_factors, dtype=float)
+    norm = c / size[:, None]
+    m1 = norm[is_peak].mean(axis=0)
+    m0 = norm[~is_peak].mean(axis=0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        raw = np.log2((m1 + 1.0) / (m0 + 1.0))
+    est = lfc.reindex(counts.columns).to_numpy(dtype=float)
+    sel = (np.abs(raw) >= min_abs) & ((m1 + m0) / 2 >= min_mean) & np.isfinite(est) & (est != 0)
+    if sel.sum() < 5:
+        return None
+    return float(np.mean(np.sign(raw[sel]) == np.sign(est[sel])))
+
+
+def _restore_gene_labels(result_index, original_index):
+    """pydeseq2 turns gene names into str. Map them back to the labels of ``counts_df`` (e.g. int
+    gene ids), via str(label) -> label. If two labels have the same str() the mapping is
+    ambiguous: the labels are left as str and a warning is issued."""
+    str_to_label = {}
+    ambiguous = False
+    for label in original_index:
+        key = str(label)
+        if key in str_to_label and str_to_label[key] != label:
+            ambiguous = True
+        str_to_label.setdefault(key, label)
+    if ambiguous:
+        warnings.warn(
+            "Gene labels of counts_df that are different but have the same string form (e.g. 1 and "
+            "'1'): the labels of the fold-change result are returned as strings.",
+            UserWarning, stacklevel=3)
+        return result_index
+    if all(isinstance(i, str) for i in original_index):
+        return result_index
+    if not all(str(i) in str_to_label for i in result_index):
+        return result_index
+    return pd.Index([str_to_label[str(i)] for i in result_index])
+
+
+def fc_comp(counts_df, metadata, contrast=None, shrink=True, n_cpus=None):
     """
-    Perform a DESeq2 analysis given counts data and metadata.
+    Perform a DESeq2 (pydeseq2) analysis given raw counts and sample metadata.
+
+    log2FoldChange is log2(contrast[0] / contrast[1]), i.e. peak group / comparison group,
+    explicitly (the comparison group is set as the reference level), independent of the
+    alphabetical order of the group names.
     
     Parameters:
-    - counts_df (DataFrame): The dataframe containing gene counts.
-    - metadata (DataFrame): The dataframe containing sample metadata.
+    - counts_df (DataFrame): genes x samples RAW COUNTS (DESeq2 needs counts, not TPM/FPKM;
+      a warning is issued for clearly non-integer input; values are rounded).
+    - metadata (DataFrame): index = sample names, column 'group'. Not modified.
+    - contrast (tuple): (peak_group, comparison_group). If None, ``metadata.attrs['contrast']``
+      (set by df_for_fc) is used; otherwise the first two groups in order of appearance are
+      used, with a warning.
+    - shrink (bool): apply pydeseq2 apeGLM LFC shrinkage (``lfc_shrink``) to the log2FoldChange
+      coefficient of this contrast (p-values are unchanged). If shrinkage cannot be done with
+      a verified direction, falls back to unshrunk LFC with a warning.
+    - n_cpus (int or None): passed to pydeseq2 (None: pydeseq2 default).
     
     Returns:
-    - DataFrame: The results dataframe from the DESeq2 analysis.
+    - DataFrame: pydeseq2 results (baseMean, log2FoldChange, lfcSE, stat, pvalue, padj),
+      index named 'Name' (the gene labels of ``counts_df``, with their original type -- e.g. int
+      gene ids stay int; pydeseq2 itself converts them to str). Genes with total count < 10 are
+      dropped.
+
+    The result's sign is set by the explicit contrast. As an extra check the estimated sign is
+    compared with the raw group-mean ratio normalised with DESeq2's own size factors; a
+    disagreement (< 50% of clear-cut genes) only issues a warning, it never raises.
     """
     from pydeseq2.dds import DeseqDataSet  # lazy import (heavy optional dependency)
     from pydeseq2.ds import DeseqStats
 
-    
-    # Filter genes based on counts
-    counts_df = counts_df.T
-    genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
-    counts_df = counts_df[genes_to_keep]
-    counts_df = counts_df.round().astype(int)
+    peak, ref = _resolve_contrast(contrast, metadata, sample_order=list(counts_df.columns))
 
-    # Adjust metadata
-    metadata['condition'] = metadata['group']
+    # Align metadata with the samples (columns of counts_df); only the two contrast groups are used
+    missing = [c for c in counts_df.columns if c not in metadata.index]
+    if missing:
+        raise KeyError(f"Samples of counts_df not found in metadata.index: {missing}")
+    group = metadata.loc[list(counts_df.columns), 'group']
+    keep = group.isin([peak, ref]).to_numpy()
+    samples = list(counts_df.columns[keep])
+    group = group[keep]
+    for g in (peak, ref):
+        if int((group == g).sum()) < 2:
+            raise ValueError(
+                f"Group '{g}' has fewer than 2 samples; DESeq2 needs biological replicates "
+                "(use no_repeat_fc for designs without replicates).")
 
-    # Create and run DESeq2 analysis
-    dds = DeseqDataSet(
-        counts=counts_df,
-        metadata=metadata,
-        design_factors="condition",
-        refit_cooks=True,
-        n_cpus=8,
-    )
+    counts = counts_df[samples]
+    values = counts.to_numpy(dtype=float)
+    if np.isnan(values).any():
+        raise ValueError("counts_df contains NaN; DESeq2 needs complete raw counts.")
+    if (values < 0).any():
+        raise ValueError("counts_df contains negative values; DESeq2 needs raw counts.")
+    if np.any(np.abs(values - np.round(values)) > 1e-3):
+        warnings.warn(
+            "counts_df contains non-integer values (TPM/FPKM/normalised data?). DESeq2 needs raw "
+            "counts; values will be rounded, and the fold changes/p-values are not valid for "
+            "normalised expression.", UserWarning, stacklevel=2)
+
+    # Filter genes based on counts (total >= 10), then round to integers (genes columns)
+    counts_t = counts.T
+    genes_to_keep = counts_t.columns[counts_t.sum(axis=0) >= 10]
+    counts_t = counts_t[genes_to_keep].round().astype(int)
+
+    # Private metadata copy (the caller's metadata is never touched)
+    cond = group.astype(str).to_numpy()
+    peak_s, ref_s = str(peak), str(ref)
+    new_api = _accepts(DeseqDataSet.__init__, 'design')
+    if new_api:
+        # reference level = first category of a Categorical
+        condition = pd.Categorical(cond, categories=[ref_s, peak_s])
+    else:
+        condition = cond
+    meta = pd.DataFrame({'condition': condition}, index=pd.Index(samples))
+
+    dds_kwargs = dict(counts=counts_t, metadata=meta, refit_cooks=True)
+    if _accepts(DeseqDataSet.__init__, 'n_cpus'):
+        dds_kwargs['n_cpus'] = n_cpus
+    if _accepts(DeseqDataSet.__init__, 'quiet'):
+        dds_kwargs['quiet'] = True
+    if new_api:
+        dds_kwargs['design'] = '~condition'
+    else:  # pydeseq2 0.4.x
+        dds_kwargs['design_factors'] = 'condition'
+        dds_kwargs['ref_level'] = ['condition', ref_s]
+    dds = DeseqDataSet(**dds_kwargs)
     dds.deseq2()
 
-    # Get and summarize statistics
-    stat_res = DeseqStats(dds, n_cpus=8)
+    stats_kwargs = dict(contrast=['condition', peak_s, ref_s])
+    if _accepts(DeseqStats.__init__, 'n_cpus'):
+        stats_kwargs['n_cpus'] = n_cpus
+    if _accepts(DeseqStats.__init__, 'quiet'):
+        stats_kwargs['quiet'] = True
+    stat_res = DeseqStats(dds, **stats_kwargs)
     stat_res.summary(lfc_null=0.1, alt_hypothesis="greaterAbs")
-    stat_res.results_df['log2FoldChange'] = -1 * stat_res.results_df['log2FoldChange']
-    
-    return stat_res.results_df
+
+    # Direction self-check (insurance only: the direction is fixed by the explicit contrast).
+    # Uses DESeq2's own size factors; never raises, only warns. Skipped if they are unavailable.
+    is_peak = (group == peak).to_numpy()
+    size_factors = _get_size_factors(dds, samples)
+    agree = _direction_agrees(counts_t, is_peak, stat_res.results_df['log2FoldChange'],
+                              size_factors)
+    if agree is not None and agree < 0.5:
+        warnings.warn(
+            f"log2FoldChange direction check: only {agree:.0%} of clear-cut genes have the "
+            f"sign of log2({peak}/{ref}) (normalised with the DESeq2 size factors). The direction "
+            "is set by the explicit contrast, so this is only a warning; please check the result.",
+            UserWarning, stacklevel=2)
+
+    if shrink:
+        unshrunk = stat_res.results_df.copy()
+        coeff_candidates = [c for c in stat_res.LFC.columns if c != 'Intercept']
+        expected = {f"condition[T.{peak_s}]", f"condition_{peak_s}_vs_{ref_s}"}
+        reason = None
+        if len(coeff_candidates) != 1 or coeff_candidates[0] not in expected:
+            reason = (f"cannot identify the {peak_s}-vs-{ref_s} coefficient "
+                      f"(LFC columns: {list(stat_res.LFC.columns)})")
+        else:
+            try:
+                stat_res.lfc_shrink(coeff=coeff_candidates[0])
+                agree = _direction_agrees(counts_t, is_peak,
+                                          stat_res.results_df['log2FoldChange'], size_factors)
+                if agree is not None and agree < 0.5:
+                    reason = "shrunk LFC direction does not match the contrast"
+            except Exception as e:  # pydeseq2 version differences / convergence problems
+                reason = f"lfc_shrink failed ({type(e).__name__}: {e})"
+        if reason is not None:
+            warnings.warn(f"LFC shrinkage skipped, returning unshrunk log2FoldChange: {reason}.",
+                          UserWarning, stacklevel=2)
+            stat_res.results_df = unshrunk
+
+    result = stat_res.results_df.copy()
+    result.index = _restore_gene_labels(result.index, counts_df.index)
+    result.index.name = 'Name'
+    return result
 
 
 def compute_fc(
-    gene_file, metabo_file, design_file=None, aggregation_func=None, target=None
+    gene_file, metabo_file, design_file=None, aggregation_func=None, target=None,
+    window='after', offset=1, shrink=True, n_cpus=None, pseudocount=1.0,
 ):
     """
-    ... [rest of the docstring and function]
+    Read the files and compute the fold change of every gene between the peak time point of
+    ``target`` and its neighbouring time point (see ``find_noontide``).
+
+    With a design file: replicates are aggregated by ``aggregation_func`` (default
+    ``repeat_aggregation_mean``) to find the peak, and DESeq2 (``fc_comp``) is run on the raw
+    gene table. Without a design file: ``no_repeat_fc`` is used.
+
+    Returns:
+        DataFrame with a 'log2FoldChange' column (index named 'Name').
     """
+    if target is None:
+        raise ValueError("target (the name of the target metabolite) is required.")
+
     # Read data
     gene = read_upload(gene_file)
     metabo = read_upload(metabo_file)
     
     if design_file is not None:
         design = read_upload(design_file)
-        # Process data
-        processed_gene = aggregation_func(gene, design)
+        if aggregation_func is None:
+            aggregation_func = repeat_aggregation_mean
         processed_metabo = aggregation_func(metabo, design)
-        fc_data = df_for_fc(processed_metabo, target, gene, design)  # Added target
-        fc = fc_comp(fc_data[0], fc_data[1])
+        counts_df, design_sub = df_for_fc(processed_metabo, target, gene, design,
+                                          window=window, offset=offset)
+        fc = fc_comp(counts_df, design_sub, shrink=shrink, n_cpus=n_cpus)
         
     else:
-        noontide = find_noontide(metabo, target)  # Passed target as row_name
-        fc = no_repeat_fc(gene, noontide)
+        noontide = find_noontide(metabo, target, window=window, offset=offset)
+        fc = no_repeat_fc(gene, noontide, pseudocount=pseudocount)
     
     return fc
